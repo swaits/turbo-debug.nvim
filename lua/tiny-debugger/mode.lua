@@ -1,5 +1,6 @@
 local config = require("tiny-debugger.config")
 local help = require("tiny-debugger.help")
+local ui = require("tiny-debugger.ui")
 
 local M = {}
 
@@ -105,6 +106,7 @@ function M.enter()
   local buf = vim.api.nvim_get_current_buf()
   set_keymaps(buf)
   set_cursor_highlight()
+  ui.open()
 
   if config.opts.help_on_enter then
     help.open()
@@ -119,6 +121,7 @@ function M.exit()
   clear_keymaps(buf)
   restore_cursor_highlight()
   help.close()
+  ui.close()
 end
 
 function M.toggle()
