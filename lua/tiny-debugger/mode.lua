@@ -72,6 +72,14 @@ local function setup_default_actions()
       require("dapui").elements.watches.add(expr)
     end
   end
+
+  actions.hover = function()
+    require("dapui").eval()
+  end
+
+  actions.eval = function()
+    require("dapui").float_element("repl")
+  end
 end
 
 -- actions that also get visual mode mappings
