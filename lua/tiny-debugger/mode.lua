@@ -59,7 +59,23 @@ local function setup_default_actions()
   end
   actions.restart = function() dap.restart() end
   actions.help = function() help.open() end
+
+  actions.watch = function()
+    local expr
+    if vim.fn.mode() == "v" or vim.fn.mode() == "V" then
+      vim.cmd('noautocmd normal! "vy')
+      expr = vim.fn.getreg("v")
+    else
+      expr = vim.fn.expand("<cexpr>")
+    end
+    if expr and expr ~= "" then
+      require("dapui").elements.watches.add(expr)
+    end
+  end
 end
+
+-- actions that also get visual mode mappings
+local visual_actions = { watch = true, hover = true }
 
 local function set_keymaps(buf)
   local keys = config.opts.keys
@@ -67,6 +83,9 @@ local function set_keymaps(buf)
     if key and actions[name] then
       stash_mapping(buf, key)
       vim.keymap.set("n", key, actions[name], { buffer = buf, silent = true, desc = "tiny-debugger: " .. name })
+      if visual_actions[name] then
+        vim.keymap.set("v", key, actions[name], { buffer = buf, silent = true, desc = "tiny-debugger: " .. name })
+      end
     end
   end
 end
@@ -76,6 +95,9 @@ local function clear_keymaps(buf)
   for name, key in pairs(keys) do
     if key and actions[name] then
       pcall(vim.keymap.del, "n", key, { buffer = buf })
+      if visual_actions[name] then
+        pcall(vim.keymap.del, "v", key, { buffer = buf })
+      end
       restore_mapping(buf, key)
     end
   end
