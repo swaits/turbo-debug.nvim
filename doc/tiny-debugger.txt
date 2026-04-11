@@ -1,4 +1,4 @@
-*tiny-debugger.txt*    A zero-config debugging experience for Neovim
+*tiny-debugger.txt*    A zero-config debugging experience for Neovim 0.12+
 
 ==============================================================================
 CONTENTS                                            *tiny-debugger-contents*
@@ -8,16 +8,222 @@ CONTENTS                                            *tiny-debugger-contents*
   3. Setup ................................. |tiny-debugger.setup|
   4. Debug Mode ............................ |tiny-debugger-debug-mode|
   5. Keybindings ........................... |tiny-debugger.keys|
-  6. Adapters .............................. |tiny-debugger.adapters|
-  7. Configuration ......................... |tiny-debugger-configuration|
+  6. Breakpoints ........................... |tiny-debugger-breakpoints|
+  7. UI Layout ............................. |tiny-debugger-layout|
+  8. Adapters .............................. |tiny-debugger.adapters|
+  9. API ................................... |tiny-debugger-api|
+ 10. Troubleshooting ....................... |tiny-debugger-troubleshooting|
 
 ==============================================================================
 1. Introduction                                 *tiny-debugger-introduction*
 
-tiny-debugger.nvim gives you a fully-featured debugging experience out of one
-line of config. Under the hood it wires together nvim-dap, nvim-dap-ui,
-nvim-dap-virtual-text, and persistent-breakpoints into a single cohesive
-experience with modal keybindings.
+tiny-debugger.nvim gives you a fully-featured, beautiful debugging experience
+out of one line of config. Under the hood it wires together nvim-dap,
+nvim-dap-ui, nvim-dap-virtual-text, and persistent-breakpoints into a single
+cohesive experience with modal keybindings.
+
+Features:
+- Inline virtual text showing variable values in source code
+- Hover inspection with `K`
+- Persistent breakpoints that survive restarts
+- Watch expressions from the code window with `W`
+- Scopes, stacks, REPL, and console panels
+- Modal keybindings active only during debug sessions
+- Help box showing all keybindings
+- Zero-config adapters for 10+ languages
+
+==============================================================================
+2. Installation                                 *tiny-debugger-installation*
+
+Add one line to your init.lua: >lua
+  vim.pack.add("swaits/tiny-debugger.nvim")
+<
+That's it. All dependencies are managed automatically.
+
+Requires Neovim >= 0.12.
+
+==============================================================================
+3. Setup                                               *tiny-debugger.setup*
+
+Setup is optional. The plugin works with no configuration. To customize: >lua
+  require("tiny-debugger").setup({
+    help_on_enter = true,       -- show help box when entering debug mode
+    builtin_adapters = true,    -- register built-in language adapters
+    keys = { ... },             -- override keybindings
+    adapters = { ... },         -- override or add language adapters
+    dapui = { ... },            -- override nvim-dap-ui layout/settings
+    virtual_text = { ... },     -- override nvim-dap-virtual-text settings
+  })
+<
+                                           *tiny-debugger.setup.help_on_enter*
+help_on_enter ~
+  Type: boolean, Default: `true`
+  Show the help box automatically when entering debug mode.
+
+                                        *tiny-debugger.setup.builtin_adapters*
+builtin_adapters ~
+  Type: boolean, Default: `true`
+  Register built-in adapters for supported languages. Set to `false` to
+  disable all built-in adapter registration.
+
+==============================================================================
+4. Debug Mode                                    *tiny-debugger-debug-mode*
+
+Press `<leader>d` to toggle debug mode.
+
+Entering debug mode:
+1. Opens nvim-dap-ui with the configured layout
+2. Enables inline virtual text for variable values
+3. Activates modal keybindings (buffer-local)
+4. Changes cursor highlight to indicate debug mode
+5. Shows help box (if `help_on_enter` is true)
+
+Exiting debug mode (any of):
+- `<leader>d` again (manual toggle)
+- `q` (terminate session — auto-exits debug mode)
+- DAP session ends naturally
+
+On exit, everything is restored: keymaps, UI, virtual text, cursor.
+
+==============================================================================
+5. Keybindings                                         *tiny-debugger.keys*
+
+Modal keybindings are active only during debug mode. They shadow editing
+keys you don't need while debugging, but preserve all navigation keys.
+
+Default keymap:
+
+  Key   Action                    Mnemonic ~
+  `c`     Continue                  Universal across debuggers
+  `s`     Step over                 Step
+  `d`     Step into                 Descend into the function
+  `r`     Step out                  Return from the function
+  `C`     Run to cursor             Continue to cursor
+  `x`     Toggle breakpoint         X marks the spot (always active)
+  `X`     Conditional breakpoint    Shift variant of x (always active)
+  `W`     Watch expr under cursor   Watch
+  `K`     Hover / inspect           Matches LSP hover convention
+  `E`     Eval in REPL              Evaluate
+  `q`     Terminate session         Quit debugging
+  `R`     Restart session           Rerun
+  `?`     Help popup                Show keybindings
+
+Note: `x` and `X` work outside debug mode too (persistent breakpoints).
+
+Override any key: >lua
+  require("tiny-debugger").setup({
+    keys = {
+      continue = "g",       -- remap continue to g
+      step_over = false,    -- disable step_over binding
+    },
+  })
+<
+Preserved keys (not shadowed):
+- Navigation: `h j k l w b e f F t T / n N 0 ^ $ G g { } % [ ]`
+- Insert: `i a o O` (needed for REPL/terminal)
+- Visual/yank: `v V y p u`
+- All Ctrl/leader combos
+
+==============================================================================
+6. Breakpoints                                  *tiny-debugger-breakpoints*
+
+Breakpoints are managed by persistent-breakpoints.nvim. They persist across
+Neovim restarts and are visible in the sign column at all times.
+
+`x` toggles a breakpoint on the current line.
+`X` prompts for a condition and sets a conditional breakpoint.
+
+Both work outside debug mode — no need to enter debug mode first.
+
+==============================================================================
+7. UI Layout                                       *tiny-debugger-layout*
+
+Default layout:
+
+  Left sidebar (40 columns):
+  - Scopes (50%) — local/global variables in current frame
+  - Watches (25%) — user-added watch expressions
+  - Stacks (25%) — call stack navigation
+
+  Bottom tray (12 lines):
+  - REPL (50%) — evaluate expressions
+  - Console (50%) — program stdout/stderr
+
+Override the layout: >lua
+  require("tiny-debugger").setup({
+    dapui = {
+      layouts = { ... },  -- see nvim-dap-ui docs for format
+    },
+  })
+<
+==============================================================================
+8. Adapters                                        *tiny-debugger.adapters*
+
+Built-in adapter support (adapter binary must be installed):
+
+  Language         Adapter          Binary ~
+  Python           debugpy          python -m debugpy
+  JavaScript/TS    js-debug         js-debug-adapter
+  Go               delve            dlv
+  C/C++            codelldb         codelldb
+  Rust             codelldb         codelldb
+  Swift            codelldb         codelldb
+  C#               netcoredbg       netcoredbg
+  Java             java-debug       java-debug-adapter
+  Kotlin           kotlin-debug     kotlin-debug-adapter
+  PHP              php-debug        php-debug-adapter
+  Ruby             rdbg             rdbg
+  Lua (Neovim)     osv              one-small-step-for-vimkind
+
+Path resolution order:
+1. User override via `opts.adapters`
+2. Binary on `$PATH`
+3. Standard mason install path (~/.local/share/nvim/mason/bin/)
+
+Adapter binaries are the user's responsibility to install.
+
+Override or add adapters: >lua
+  require("tiny-debugger").setup({
+    adapters = {
+      python = { ... },    -- override built-in
+      zig = { ... },        -- add new language
+    },
+    builtin_adapters = false,  -- disable all built-ins
+  })
+<
+Existing user nvim-dap configurations are never overridden.
+
+==============================================================================
+9. API                                              *tiny-debugger-api*
+
+                                                    *tiny-debugger.toggle()*
+require("tiny-debugger").toggle()
+  Toggle debug mode on/off.
+
+                                                    *tiny-debugger.active()*
+require("tiny-debugger").active()
+  Returns `true` if debug mode is currently active, `false` otherwise.
+  Useful for statusline integration.
+
+==============================================================================
+10. Troubleshooting                          *tiny-debugger-troubleshooting*
+
+No adapter found ~
+  Ensure the adapter binary is installed and on your PATH, or installed
+  via mason.nvim. tiny-debugger configures adapters, it does not install
+  them.
+
+Breakpoints not persisting ~
+  Check that persistent-breakpoints.nvim is loaded. Run:
+  `:lua print(require("persistent-breakpoints") and "ok")`
+
+Virtual text not appearing ~
+  Virtual text only appears during an active DAP session in debug mode.
+  Ensure nvim-dap-virtual-text is loaded:
+  `:lua print(require("nvim-dap-virtual-text") and "ok")`
+
+Version error ~
+  tiny-debugger.nvim requires Neovim >= 0.12 for vim.pack support.
 
 ==============================================================================
 vim:tw=78:ts=8:ft=help:norl:
