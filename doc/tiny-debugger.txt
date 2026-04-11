@@ -1,0 +1,23 @@
+*tiny-debugger.txt*    A zero-config debugging experience for Neovim
+
+==============================================================================
+CONTENTS                                            *tiny-debugger-contents*
+
+  1. Introduction .......................... |tiny-debugger-introduction|
+  2. Installation .......................... |tiny-debugger-installation|
+  3. Setup ................................. |tiny-debugger.setup|
+  4. Debug Mode ............................ |tiny-debugger-debug-mode|
+  5. Keybindings ........................... |tiny-debugger.keys|
+  6. Adapters .............................. |tiny-debugger.adapters|
+  7. Configuration ......................... |tiny-debugger-configuration|
+
+==============================================================================
+1. Introduction                                 *tiny-debugger-introduction*
+
+tiny-debugger.nvim gives you a fully-featured debugging experience out of one
+line of config. Under the hood it wires together nvim-dap, nvim-dap-ui,
+nvim-dap-virtual-text, and persistent-breakpoints into a single cohesive
+experience with modal keybindings.
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:
