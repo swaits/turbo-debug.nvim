@@ -12,3 +12,8 @@ vim.pack.add({ "rcarriga/nvim-dap-ui" })
 vim.pack.add({ "nvim-neotest/nvim-nio" })
 vim.pack.add({ "theHamsta/nvim-dap-virtual-text" })
 vim.pack.add({ "Weissle/persistent-breakpoints.nvim" })
+
+-- toggle debug mode
+vim.keymap.set("n", "<leader>d", function()
+  require("tiny-debugger").toggle()
+end, { silent = true, desc = "tiny-debugger: toggle debug mode" })
