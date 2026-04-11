@@ -1,6 +1,7 @@
 local config = require("tiny-debugger.config")
 local help = require("tiny-debugger.help")
 local ui = require("tiny-debugger.ui")
+local virtual_text = require("tiny-debugger.virtual_text")
 
 local M = {}
 
@@ -107,6 +108,7 @@ function M.enter()
   set_keymaps(buf)
   set_cursor_highlight()
   ui.open()
+  virtual_text.enable()
 
   if config.opts.help_on_enter then
     help.open()
@@ -122,6 +124,7 @@ function M.exit()
   restore_cursor_highlight()
   help.close()
   ui.close()
+  virtual_text.disable()
 end
 
 function M.toggle()
