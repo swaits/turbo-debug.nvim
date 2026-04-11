@@ -1,10 +1,12 @@
 local config = require("tiny-debugger.config")
 local mode = require("tiny-debugger.mode")
+local breakpoints = require("tiny-debugger.breakpoints")
 
 local M = {}
 
 function M.setup(opts)
   config.merge(opts)
+  breakpoints.setup()
 end
 
 function M.toggle()
