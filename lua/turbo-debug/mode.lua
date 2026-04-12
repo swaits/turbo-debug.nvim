@@ -81,18 +81,11 @@ local ICON = {
 local function build_default_layouts()
   local pos = config.opts.sidebar == "right" and "right" or "left"
 
-  -- Console height: max(5 rows, 15% of available vertical space). The
-  -- drift-back-to-huge bug is fixed by dapui.open({ reset = true }) in
-  -- M.enter, not by clamping the size small. User wants Console to
-  -- scale up on tall terminals while never going below 5 rows.
-  local statusline_rows = vim.o.laststatus > 0 and 1 or 0
-  local cmdline_rows    = math.max(1, vim.o.cmdheight)
-  local top_bar_rows    = 3  -- sep + content + sep (restored to 3 rows for visual symmetry)
-  local bottom_bar_rows = 2  -- content + sep
-  local avail = vim.o.lines - top_bar_rows - bottom_bar_rows - statusline_rows - cmdline_rows
-  if avail < 10 then avail = 10 end
+  -- Console height: max(8 rows, 20% of total editor lines). More
+  -- generous than the previous 15% — user reported the Console kept
+  -- feeling "laughably small" so we're allocating real estate.
   local console_size = config.opts.console_height
-                       or math.max(5, math.floor(avail * 0.15))
+                       or math.max(8, math.floor(vim.o.lines * 0.2))
 
   -- Sidebar width: ideal 40 cols, never less than 25, never more than 1/3
   -- of tty width. Scales down gracefully on narrow terminals, stops at 40
@@ -279,21 +272,16 @@ local function render_sbar()
   local pad_right = remain - pad_left
   local content_line = brand_text .. string.rep(" ", pad_left) .. status_msg .. string.rep(" ", pad_right) .. state_chip
 
-  -- 3 rows: sep / content / sep. Both separators render with the
-  -- FloatBorder highlight to match dapui's own pane borders — user
-  -- reported the dark transition at the bottom of a 2-row status bar
-  -- looked inconsistent with the light-grey borders around everything
-  -- else.
+  -- 2 rows: sep / content. No bottom separator — dapui renders its own
+  -- pane border above its top elements, which serves as our bottom
+  -- edge. Drawing ours too was producing two stacked separator rows.
   vim.bo[sbar_buf].modifiable = true
-  vim.api.nvim_buf_set_lines(sbar_buf, 0, -1, false, { sep, content_line, sep })
+  vim.api.nvim_buf_set_lines(sbar_buf, 0, -1, false, { sep, content_line })
   vim.bo[sbar_buf].modifiable = false
 
   vim.api.nvim_buf_clear_namespace(sbar_buf, bar_ns, 0, -1)
   pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 0, 0, {
     end_row = 0, end_col = #sep, hl_group = "TurboDebugBarSeparator",
-  })
-  pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 2, 0, {
-    end_row = 2, end_col = #sep, hl_group = "TurboDebugBarSeparator",
   })
   -- content
   pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 1, 0, {
@@ -499,7 +487,7 @@ local function open_bars()
     sbar_win = vim.api.nvim_get_current_win()
     sbar_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_win_set_buf(sbar_win, sbar_buf)
-    vim.api.nvim_win_set_height(sbar_win, 3)
+    vim.api.nvim_win_set_height(sbar_win, 2)
     setup_bar_buf(sbar_buf)
     setup_bar_win(sbar_win)
     vim.wo[sbar_win].winfixheight = true
@@ -534,29 +522,58 @@ local function open_bars()
   render_bars()
 end
 
--- Pin every dapui pane's height so layout drift from subsequent wincmd
--- rearrangements (or from our own bar manipulations) can't mess with
--- the sizing. Console is the main offender — without winfixheight it
--- absorbs freed rows on re-entry and eventually fills the column.
+-- Pin dapui pane heights. Console gets its configured size. Sidebar
+-- panes get explicit equal distribution with any rounding remainder
+-- going to the LAST pane (Breakpoints) so it's never smaller than its
+-- neighbors. winfixheight locks each pane against future rearrangements.
 local function pin_dapui_sizes()
-  local pane_fts = {
-    dapui_stacks = true, dapui_scopes = true, dapui_watches = true,
-    dapui_breakpoints = true, dapui_console = true, ["dap-repl"] = true,
-  }
+  -- gather one window per dapui pane filetype
+  local pane_wins = {}
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_valid(buf) then
       local ft = vim.bo[buf].filetype
-      if pane_fts[ft] then
-        for _, win in ipairs(vim.fn.win_findbuf(buf)) do
-          if vim.api.nvim_win_is_valid(win) then
-            if ft == "dapui_console" then
-              pcall(vim.api.nvim_win_set_height, win, config.opts.console_height or 5)
-            end
-            pcall(function() vim.wo[win].winfixheight = true end)
-          end
+      if ft == "dapui_stacks" or ft == "dapui_scopes" or ft == "dapui_watches"
+         or ft == "dapui_breakpoints" or ft == "dapui_console" or ft == "dap-repl" then
+        local wins = vim.fn.win_findbuf(buf)
+        if wins and wins[1] and vim.api.nvim_win_is_valid(wins[1]) then
+          pane_wins[ft] = wins[1]
         end
       end
     end
+  end
+
+  -- Console
+  if pane_wins.dapui_console then
+    local target = config.opts.console_height
+                   or math.max(8, math.floor(vim.o.lines * 0.2))
+    pcall(vim.api.nvim_win_set_height, pane_wins.dapui_console, target)
+  end
+
+  -- Sidebar: explicit equal distribution. Compute total current height
+  -- of the four sidebar panes and divide evenly, handing any remainder
+  -- to Breakpoints (last pane) so it's never smaller than the others.
+  local order = { "dapui_stacks", "dapui_scopes", "dapui_watches", "dapui_breakpoints" }
+  local present = {}
+  local total = 0
+  for _, ft in ipairs(order) do
+    local w = pane_wins[ft]
+    if w then
+      present[#present + 1] = w
+      total = total + vim.api.nvim_win_get_height(w)
+    end
+  end
+  if #present > 1 and total > 0 then
+    local each = math.floor(total / #present)
+    local residual = total - (each * #present)
+    for i, w in ipairs(present) do
+      local h = each + (i == #present and residual or 0)
+      pcall(vim.api.nvim_win_set_height, w, h)
+    end
+  end
+
+  -- winfixheight on everything
+  for _, w in pairs(pane_wins) do
+    pcall(function() vim.wo[w].winfixheight = true end)
   end
 end
 
@@ -572,8 +589,11 @@ local function close_bars()
 end
 
 local function reposition_bars()
-  -- Splits auto-track VimResized via winfixheight; just re-render content.
+  -- Splits auto-track VimResized via winfixheight; re-render the bar
+  -- content and re-pin dapui sizes so plugins like focus.nvim that
+  -- auto-resize on focus change can't permanently skew the layout.
   render_bars()
+  pin_dapui_sizes()
 end
 
 -- ─── dap-ui setup ────────────────────────────────────────────────────────────
