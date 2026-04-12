@@ -714,6 +714,21 @@ local function ensure_dapui()
   dap.listeners.after.event_terminated["turbo-debug-bar"]   = refresh_bars
   dap.listeners.after.event_exited["turbo-debug-bar"]       = refresh_bars
 
+  -- When a stopped event fires, dap will jump to the source frame using
+  -- its switchbuf logic. `uselast` (the common default) targets the
+  -- CURRENT window — but if focus happens to be on a dapui pane or one
+  -- of our bars, dap falls back to `winnr('#')` which can land anywhere
+  -- (including bufferline's tabline area or a wrong split). By shifting
+  -- focus to a real source window BEFORE dap processes the jump, we
+  -- guarantee new source files (stepped-into library/stdlib files) open
+  -- in the intended source window and the chrome stays intact.
+  dap.listeners.before.event_stopped["turbo-debug-focus-source"] = function()
+    local w = source_window()
+    if w and w ~= vim.api.nvim_get_current_win() then
+      pcall(vim.api.nvim_set_current_win, w)
+    end
+  end
+
   dap.listeners.after.event_stopped["turbo-debug-ip"] = function(session, body)
     vim.defer_fn(function()
       clear_ip()
