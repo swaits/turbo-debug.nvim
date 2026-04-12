@@ -25,6 +25,18 @@ local cbar_win, cbar_buf = nil, nil
 -- installed[buf][name] = { key = lhs, prev_n = <prev n-mode map>, prev_v = <prev v-mode map> }
 local installed = {}
 
+-- Saved across M.enter → M.exit so we can restore the user's global
+-- fillchars. With `laststatus=3`, nvim draws a horizontal separator row
+-- between every pair of stacked windows using the `horiz` fillchar
+-- (default `─`) painted with WinSeparator.fg. In themes with dark
+-- WinSeparator.fg (nordfox uses #232831) that renders as a dim grey row
+-- sandwiched between our bright bar separator and the neighboring dapui
+-- pane — the "second darker line below the status bar" the user sees.
+-- We replace horiz/horizup/horizdown with space during debug mode so
+-- nvim has nothing visible to draw between stacked windows; our own
+-- bar rows serve as the only chrome.
+local saved_fillchars = nil
+
 local dapui_initialized = false
 local vt_initialized = false
 
@@ -646,6 +658,22 @@ local function close_bars()
   sbar_zones, cbar_zones = {}, {}
 end
 
+local function hide_horiz_separators()
+  if saved_fillchars ~= nil then return end
+  saved_fillchars = vim.o.fillchars
+  local fc = vim.opt.fillchars:get()
+  fc.horiz     = " "
+  fc.horizup   = " "
+  fc.horizdown = " "
+  vim.opt.fillchars = fc
+end
+
+local function restore_horiz_separators()
+  if saved_fillchars == nil then return end
+  vim.o.fillchars = saved_fillchars
+  saved_fillchars = nil
+end
+
 -- nvim sometimes *squishes* a bar to 0 rows rather than closing it when
 -- grid pressure spikes (notably: bufferline's tabline flipping visible on
 -- buffer-count change reclaims one row from somewhere, and `winfixheight`
@@ -1173,6 +1201,7 @@ function M.enter()
   if active then return end
   active = true
   define_highlights()
+  hide_horiz_separators()
   setup_actions()
 
   local group = vim.api.nvim_create_augroup("TurboDebugModalKeys", { clear = true })
@@ -1278,6 +1307,7 @@ function M.exit()
   if dapui_initialized then require("dapui").close() end
   close_bars()
   if vt_initialized then require("nvim-dap-virtual-text").disable() end
+  restore_horiz_separators()
 end
 
 function M.toggle()
