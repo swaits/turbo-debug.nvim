@@ -487,7 +487,12 @@ local function setup_bar_buf(buf)
 end
 
 local function setup_bar_win(win)
-  vim.wo[win].winhighlight = "Normal:TurboDebugBar,EndOfBuffer:TurboDebugBar"
+  -- Include StatusLine/StatusLineNC so any statusline row the bar
+  -- might pick up (with laststatus=2 every window gets one) blends
+  -- into the bar's Normal bg instead of rendering in the dark default
+  -- StatusLine color — which was the "wrong color border below top bar".
+  vim.wo[win].winhighlight = "Normal:TurboDebugBar,EndOfBuffer:TurboDebugBar,StatusLine:TurboDebugBar,StatusLineNC:TurboDebugBar"
+  vim.wo[win].statusline = " "  -- empty content; hl makes it invisible
   vim.wo[win].winfixheight = true
   vim.wo[win].list = false
   vim.wo[win].cursorline = false
@@ -1155,14 +1160,29 @@ function M.enter()
   })
   -- WinResized fires on any geometry change: mouse-drags on split
   -- borders, bufferline's tabline appearing/disappearing (which shifts
-  -- all windows), `wincmd =`, etc. A single `redraw!` clears stale
-  -- pixels from the previous layout. Cheap and covers every
-  -- layout-shift case without touching sizes.
+  -- and can even KILL a bar when the grid gets too tight), `wincmd =`,
+  -- etc. Cheap O(1) check for missing bars — only does work when one
+  -- actually got nuked. Always finishes with a redraw! to clear stale
+  -- pixels from the shift.
   vim.api.nvim_create_autocmd("WinResized", {
     group = group,
     callback = function()
       if not active then return end
-      vim.schedule(function() pcall(vim.cmd, "redraw!") end)
+      vim.schedule(function()
+        local need_recover = not (sbar_win and vim.api.nvim_win_is_valid(sbar_win))
+                          or not (cbar_win and vim.api.nvim_win_is_valid(cbar_win))
+        if need_recover then
+          if not (sbar_win and vim.api.nvim_win_is_valid(sbar_win)) then
+            sbar_win, sbar_buf = nil, nil
+          end
+          if not (cbar_win and vim.api.nvim_win_is_valid(cbar_win)) then
+            cbar_win, cbar_buf = nil, nil
+          end
+          open_bars()
+          render_bars()
+        end
+        pcall(vim.cmd, "redraw!")
+      end)
     end,
   })
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
