@@ -81,18 +81,12 @@ local ICON = {
 local function build_default_layouts()
   local pos = config.opts.sidebar == "right" and "right" or "left"
 
-  -- Console height: min(5 rows, 15% of available vertical space). Caps
-  -- at 5 rows — Console is ancillary; the sidebar panes and source area
-  -- deserve most of the vertical space. On very tall terminals the 15%
-  -- calc would dominate, so the min() clamp keeps Console compact.
-  local top_bar_rows    = 2
-  local bottom_bar_rows = 2
-  local statusline_rows = vim.o.laststatus > 0 and 1 or 0
-  local cmdline_rows    = math.max(1, vim.o.cmdheight)
-  local avail = vim.o.lines - top_bar_rows - bottom_bar_rows - statusline_rows - cmdline_rows
-  if avail < 10 then avail = 10 end
-  local console_size = math.min(5, math.floor(avail * 0.15))
-  if console_size < 3 then console_size = 3 end  -- absolute floor so it's usable
+  -- Console height: fixed 5 rows. Dynamic sizing via min(5, 15%) was
+  -- producing the right number on first enter but dapui's internal
+  -- layout tracker was letting Console grow back up on re-enter,
+  -- eventually filling the column. A hard-coded size plus a post-open
+  -- `winfixheight = true` pin (see pin_dapui_sizes) stops the drift.
+  local console_size = config.opts.console_height or 5
 
   -- Sidebar width: ideal 40 cols, never less than 25, never more than 1/3
   -- of tty width. Scales down gracefully on narrow terminals, stops at 40
@@ -137,7 +131,11 @@ local function define_highlights()
   -- seam between the bar and the surrounding panes.
   hl(0, "TurboDebugBar",            { default = true, link = "Normal" })
   hl(0, "TurboDebugBarSeparator",   { default = true, link = "FloatBorder" })
-  hl(0, "TurboDebugBarCtrl",        { default = true, link = "StatusLine" })
+  -- Control labels: link to Normal so the text blends with the bar's
+  -- Normal-bg surface. StatusLine bg was creating a visible color patch
+  -- behind each label. The key letter still pops via TurboDebugBarKey
+  -- (Special fg, bold), and icons carry their own emoji color.
+  hl(0, "TurboDebugBarCtrl",        { default = true, link = "Normal" })
   hl(0, "TurboDebugBarStatus",      { default = true, link = "Comment" })
   hl(0, "TurboDebugBarBrand",       { default = true, link = "Title" })
   hl(0, "TurboDebugBarReady",       { default = true, link = "DiagnosticHint" })
@@ -525,27 +523,30 @@ local function open_bars()
   render_bars()
 end
 
--- After dapui has created its vertical splits (sidebar etc.), the bars
--- may be constrained to the non-sidebar column. `wincmd K` / `wincmd J`
--- re-layout the window tree with the bar window spanning full editor
--- width at the top / bottom respectively, pushing everything else into
--- the middle rows.
-local function force_bars_full_width()
-  local caller_win = vim.api.nvim_get_current_win()
-  if sbar_win and vim.api.nvim_win_is_valid(sbar_win) then
-    pcall(vim.api.nvim_set_current_win, sbar_win)
-    pcall(vim.cmd, "wincmd K")
-    pcall(vim.api.nvim_win_set_height, sbar_win, 2)
+-- Pin every dapui pane's height so layout drift from subsequent wincmd
+-- rearrangements (or from our own bar manipulations) can't mess with
+-- the sizing. Console is the main offender — without winfixheight it
+-- absorbs freed rows on re-entry and eventually fills the column.
+local function pin_dapui_sizes()
+  local pane_fts = {
+    dapui_stacks = true, dapui_scopes = true, dapui_watches = true,
+    dapui_breakpoints = true, dapui_console = true, ["dap-repl"] = true,
+  }
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_valid(buf) then
+      local ft = vim.bo[buf].filetype
+      if pane_fts[ft] then
+        for _, win in ipairs(vim.fn.win_findbuf(buf)) do
+          if vim.api.nvim_win_is_valid(win) then
+            if ft == "dapui_console" then
+              pcall(vim.api.nvim_win_set_height, win, config.opts.console_height or 5)
+            end
+            pcall(function() vim.wo[win].winfixheight = true end)
+          end
+        end
+      end
+    end
   end
-  if cbar_win and vim.api.nvim_win_is_valid(cbar_win) then
-    pcall(vim.api.nvim_set_current_win, cbar_win)
-    pcall(vim.cmd, "wincmd J")
-    pcall(vim.api.nvim_win_set_height, cbar_win, 2)
-  end
-  if vim.api.nvim_win_is_valid(caller_win) then
-    pcall(vim.api.nvim_set_current_win, caller_win)
-  end
-  render_bars()
 end
 
 local function close_bars()
@@ -1064,12 +1065,15 @@ function M.enter()
   set_debug_chrome()
   ensure_dapui()
   require("dapui").open()
+  -- Create bars AFTER dapui.open so :topleft split / :botright split
+  -- create full-width splits above/below whatever dapui built. Doing it
+  -- before dapui meant dapui's sidebar-vsplit could extend through the
+  -- bar rows, and my old `wincmd K/J` compensation caused layout drift
+  -- on re-entry (Console ballooning). Opening after dapui avoids both.
   open_bars()
-  -- dapui creates full-height vertical splits for the sidebar. Without
-  -- this step the bars end up constrained to the non-sidebar column.
-  -- `wincmd K`/`J` rearranges the window tree so each bar spans full
-  -- editor width at the top/bottom, pushing everything else in-between.
-  force_bars_full_width()
+  -- Pin dapui pane heights so re-entry / resize doesn't let Console
+  -- absorb freed rows.
+  pin_dapui_sizes()
 
   -- second install pass after dapui has created its buffers
   vim.schedule(function()
@@ -1077,7 +1081,8 @@ function M.enter()
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
       if vim.api.nvim_buf_is_loaded(buf) then M._install_for_buf(buf) end
     end
-    reposition_bars()
+    pin_dapui_sizes()
+    render_bars()
   end)
 
   ensure_vt()
@@ -1095,10 +1100,14 @@ function M.exit()
   pcall(vim.api.nvim_del_augroup_by_name, "TurboDebugModalKeys")
   clear_all_modal_keys()
   clear_debug_chrome()
-  close_bars()
   help.close()
 
+  -- Close dapui FIRST so dapui's windows tear down into a state we
+  -- control. Closing our bars first would let dapui's remaining panes
+  -- expand into the freed rows, which dapui then "remembers" and
+  -- breaks the next open's layout.
   if dapui_initialized then require("dapui").close() end
+  close_bars()
   if vt_initialized then require("nvim-dap-virtual-text").disable() end
 end
 
