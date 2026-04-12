@@ -7,6 +7,11 @@ local active = false
 local active_win = nil
 local saved_winbar = nil
 
+-- Forward declaration so listeners registered in ensure_dapui (which is
+-- defined earlier in the file than source_window) can still reference it
+-- as an upvalue rather than a nil global.
+local source_window
+
 -- two floating chrome bars (both independent of lualine):
 --   sbar = status bar pinned at the TOP of the editor.
 --     Row 0: turbo-debug · {dap status} · DEBUG · STATE
@@ -870,7 +875,8 @@ end
 -- current buffer's filetype to pick a launch configuration, so when the user
 -- presses `c` while focused in a dapui pane (filetype=dapui_scopes, etc.),
 -- we need to temporarily borrow a source window's context.
-local function source_window()
+-- NOTE: assigned (not declared) — forward-declared at top of file.
+source_window = function()
   -- prefer the current window if it's a source
   local cur = vim.api.nvim_get_current_win()
   local function is_source(w)
