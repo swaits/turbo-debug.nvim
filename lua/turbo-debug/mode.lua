@@ -134,7 +134,11 @@ local function define_highlights()
   -- default background). StatusLine was too dark and created a visible
   -- seam between the bar and the surrounding panes.
   hl(0, "TurboDebugBar",            { default = true, link = "Normal" })
-  hl(0, "TurboDebugBarSeparator",   { default = true, link = "FloatBorder" })
+  -- WinSeparator (not FloatBorder) so the bar edges match the dividers
+  -- dapui draws between its own panes. FloatBorder tends to read darker
+  -- than WinSeparator in most colorschemes, which created a visible
+  -- mismatch between our bar's bottom and the adjacent dapui pane top.
+  hl(0, "TurboDebugBarSeparator",   { default = true, link = "WinSeparator" })
   -- Control labels: link to Normal so the text blends with the bar's
   -- Normal-bg surface. StatusLine bg was creating a visible color patch
   -- behind each label. The key letter still pops via TurboDebugBarKey
@@ -1099,23 +1103,50 @@ function M.enter()
       if active then M._install_for_buf(args.buf) end
     end,
   })
-  -- On editor resize: if a bar got killed by shrink-below-minimum,
-  -- recreate it. Do NOT re-pin dapui sizes — whatever the user
-  -- (or nvim's shrink/expand redistribution) arrived at is respected.
-  vim.api.nvim_create_autocmd("VimResized", {
+  -- Recovery handler shared by several layout-change events.
+  -- 1) Editor resize (VimResized)
+  -- 2) Tabline appearing/disappearing — bufferline.nvim dynamically
+  --    toggles showtabline based on buffer count. When it flips, every
+  --    window shifts by one row and our bars can get killed or
+  --    squeezed.
+  -- 3) Arbitrary WinResized (mouse drag on pane borders, plugin-driven
+  --    wincmd=, etc.)
+  -- We don't re-pin dapui sizes here — user's manual resizes should
+  -- stick. We just recreate any bar that got nuked and re-render
+  -- content.
+  local function recover_chrome()
+    vim.schedule(function()
+      if not active then return end
+      if not (sbar_win and vim.api.nvim_win_is_valid(sbar_win)) then
+        sbar_win, sbar_buf = nil, nil
+      end
+      if not (cbar_win and vim.api.nvim_win_is_valid(cbar_win)) then
+        cbar_win, cbar_buf = nil, nil
+      end
+      open_bars()      -- idempotent
+      render_bars()
+    end)
+  end
+  vim.api.nvim_create_autocmd("VimResized", { group = group, callback = recover_chrome })
+  vim.api.nvim_create_autocmd("OptionSet", {
+    group = group,
+    pattern = "showtabline",
+    callback = recover_chrome,
+  })
+  -- Fallback: BufEnter/BufWinEnter catches bufferline showing the
+  -- tabline when a second buffer appears (bufferline doesn't always
+  -- call `:set showtabline=N`; sometimes it just computes the tabline
+  -- string which causes nvim to reserve the row on its own).
+  vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter", "TabEnter" }, {
     group = group,
     callback = function()
-      vim.schedule(function()
-        if not active then return end
-        if not (sbar_win and vim.api.nvim_win_is_valid(sbar_win)) then
-          sbar_win, sbar_buf = nil, nil
-        end
-        if not (cbar_win and vim.api.nvim_win_is_valid(cbar_win)) then
-          cbar_win, cbar_buf = nil, nil
-        end
-        open_bars()      -- idempotent; only creates what's missing
-        render_bars()
-      end)
+      -- cheap guard: only recover if one of our bars is actually gone
+      if not active then return end
+      if sbar_win and vim.api.nvim_win_is_valid(sbar_win)
+         and cbar_win and vim.api.nvim_win_is_valid(cbar_win) then
+        return
+      end
+      recover_chrome()
     end,
   })
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
