@@ -1103,80 +1103,35 @@ function M.enter()
       if active then M._install_for_buf(args.buf) end
     end,
   })
-  -- Recovery handler shared by several layout-change events.
-  -- 1) Editor resize (VimResized)
-  -- 2) Tabline appearing/disappearing — bufferline.nvim dynamically
-  --    toggles showtabline based on buffer count. When it flips, every
-  --    window shifts by one row and our bars can get killed or
-  --    squeezed.
-  -- 3) Arbitrary WinResized (mouse drag on pane borders, plugin-driven
-  --    wincmd=, etc.)
-  -- We don't re-pin dapui sizes here — user's manual resizes should
-  -- stick. We just recreate any bar that got nuked and re-render
-  -- content.
-  local function recover_chrome()
-    vim.schedule(function()
-      if not active then return end
-      -- Close any orphaned TurboDebugBar windows we're not tracking.
-      -- When the tabline toggles, nvim can sometimes leave a stale bar
-      -- window while creating a new one — which produces the "duplicate
-      -- turbo-debug rows stacked on top of each other" artifact.
-      for _, w in ipairs(vim.api.nvim_list_wins()) do
-        if vim.api.nvim_win_is_valid(w) and w ~= sbar_win and w ~= cbar_win then
-          local b = vim.api.nvim_win_get_buf(w)
-          if vim.api.nvim_buf_is_valid(b) and vim.bo[b].filetype == "TurboDebugBar" then
-            pcall(vim.api.nvim_win_close, w, true)
-          end
+  -- Editor resize: recreate any bar that got killed (shrink-below-min),
+  -- then re-render. dapui sizes are left alone so user manual resizes
+  -- stick.
+  vim.api.nvim_create_autocmd("VimResized", {
+    group = group,
+    callback = function()
+      vim.schedule(function()
+        if not active then return end
+        if not (sbar_win and vim.api.nvim_win_is_valid(sbar_win)) then
+          sbar_win, sbar_buf = nil, nil
         end
-      end
-      if not (sbar_win and vim.api.nvim_win_is_valid(sbar_win)) then
-        sbar_win, sbar_buf = nil, nil
-      end
-      if not (cbar_win and vim.api.nvim_win_is_valid(cbar_win)) then
-        cbar_win, cbar_buf = nil, nil
-      end
-      open_bars()      -- idempotent
-      render_bars()
-      -- Force a full redraw so any leftover pixels from the previous
-      -- layout (before tabline disappeared) don't linger on screen.
-      pcall(vim.cmd, "redraw!")
-    end)
-  end
-  vim.api.nvim_create_autocmd("VimResized", { group = group, callback = recover_chrome })
-  -- WinResized fires when any window's geometry changes — including
-  -- the shift that happens when bufferline's tabline disappears (the
-  -- tabline row gets reclaimed, all windows shift up). At that point
-  -- nvim re-renders at the new positions but doesn't always clear
-  -- the pixels where the old render was, producing the "duplicate
-  -- status bar rows" artifact. Forcing a full redraw here wipes the
-  -- stale pixels. We don't re-pin dapui sizes so user manual resizes
-  -- still stick.
+        if not (cbar_win and vim.api.nvim_win_is_valid(cbar_win)) then
+          cbar_win, cbar_buf = nil, nil
+        end
+        open_bars()
+        render_bars()
+      end)
+    end,
+  })
+  -- WinResized fires on any geometry change: mouse-drags on split
+  -- borders, bufferline's tabline appearing/disappearing (which shifts
+  -- all windows), `wincmd =`, etc. A single `redraw!` clears stale
+  -- pixels from the previous layout. Cheap and covers every
+  -- layout-shift case without touching sizes.
   vim.api.nvim_create_autocmd("WinResized", {
     group = group,
     callback = function()
       if not active then return end
       vim.schedule(function() pcall(vim.cmd, "redraw!") end)
-    end,
-  })
-  vim.api.nvim_create_autocmd("OptionSet", {
-    group = group,
-    pattern = "showtabline",
-    callback = recover_chrome,
-  })
-  -- Fallback: BufEnter/BufWinEnter catches bufferline showing the
-  -- tabline when a second buffer appears (bufferline doesn't always
-  -- call `:set showtabline=N`; sometimes it just computes the tabline
-  -- string which causes nvim to reserve the row on its own).
-  vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter", "TabEnter" }, {
-    group = group,
-    callback = function()
-      -- cheap guard: only recover if one of our bars is actually gone
-      if not active then return end
-      if sbar_win and vim.api.nvim_win_is_valid(sbar_win)
-         and cbar_win and vim.api.nvim_win_is_valid(cbar_win) then
-        return
-      end
-      recover_chrome()
     end,
   })
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
