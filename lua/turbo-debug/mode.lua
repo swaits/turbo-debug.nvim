@@ -81,16 +81,18 @@ local ICON = {
 local function build_default_layouts()
   local pos = config.opts.sidebar == "right" and "right" or "left"
 
-  -- Console height: 15% of the available vertical space, floored at 5 rows.
-  -- "Available" = screen rows minus the two 2-row bars, the statusline,
-  -- and the cmdline.
+  -- Console height: min(5 rows, 15% of available vertical space). Caps
+  -- at 5 rows — Console is ancillary; the sidebar panes and source area
+  -- deserve most of the vertical space. On very tall terminals the 15%
+  -- calc would dominate, so the min() clamp keeps Console compact.
   local top_bar_rows    = 2
   local bottom_bar_rows = 2
   local statusline_rows = vim.o.laststatus > 0 and 1 or 0
   local cmdline_rows    = math.max(1, vim.o.cmdheight)
   local avail = vim.o.lines - top_bar_rows - bottom_bar_rows - statusline_rows - cmdline_rows
   if avail < 10 then avail = 10 end
-  local console_size = math.max(5, math.floor(avail * 0.15))
+  local console_size = math.min(5, math.floor(avail * 0.15))
+  if console_size < 3 then console_size = 3 end  -- absolute floor so it's usable
 
   -- Sidebar width: ideal 40 cols, never less than 25, never more than 1/3
   -- of tty width. Scales down gracefully on narrow terminals, stops at 40
@@ -129,7 +131,11 @@ local function define_highlights()
   hl(0, "TurboDebugBorderActive",   { default = true, link = "Function" })
   hl(0, "TurboDebugBorderInactive", { default = true, link = "Comment" })
   hl(0, "TurboDebugWinbar",         { default = true, link = "DiagnosticError" })
-  hl(0, "TurboDebugBar",            { default = true, link = "StatusLine" })
+  -- Bar background: link to Normal so the bar blends with dapui's own
+  -- pane borders (which use Normal or WinBar — both share the editor's
+  -- default background). StatusLine was too dark and created a visible
+  -- seam between the bar and the surrounding panes.
+  hl(0, "TurboDebugBar",            { default = true, link = "Normal" })
   hl(0, "TurboDebugBarSeparator",   { default = true, link = "FloatBorder" })
   hl(0, "TurboDebugBarCtrl",        { default = true, link = "StatusLine" })
   hl(0, "TurboDebugBarStatus",      { default = true, link = "Comment" })
@@ -716,38 +722,33 @@ local function ensure_dapui()
   dap.listeners.before.event_exited["turbo-debug-ip"]     = function() clear_ip() end
 
   -- Clear the Console pane on session start/restart.
-  -- Strategy: delete the old console buffer and let dapui's own get_buf()
-  -- create a fresh one on next reference. Editing a terminal buffer in
-  -- place via nvim_buf_set_lines was breaking the terminal state and
-  -- making the Console window unresponsive. Swapping buffers is clean.
-  -- We also find any window still showing the old buffer and rehook it
-  -- to the new one so the user actually sees output in the pane.
+  --
+  -- Strategy: keep the buffer (crucially, keep the attached terminal
+  -- channel intact so dap's output stream isn't broken), briefly flip
+  -- `modifiable` on and call nvim_buf_set_lines to wipe the scrollback.
+  -- The terminal's PTY state and cursor position are preserved — only
+  -- the displayed lines are removed. Next output from the program
+  -- appends from the top of the empty buffer.
+  --
+  -- The previous "delete the whole buffer" approach only worked on
+  -- fresh launches (new terminal opens anyway) and broke on Restart
+  -- because the adapter reuses the existing terminal channel — deleting
+  -- the buffer orphaned the channel and left the Console unresponsive.
   local function clear_console()
     if not config.opts.clear_console_on_start then return end
     local ok, dapui = pcall(require, "dapui")
-    if not (ok and dapui and dapui.elements and dapui.elements.console) then return end
-    local old_ok, old_buf = pcall(dapui.elements.console.buffer)
-    if not old_ok or not old_buf or not vim.api.nvim_buf_is_valid(old_buf) then return end
-
-    -- remember every window currently showing the old buffer
-    local wins = vim.fn.win_findbuf(old_buf)
-
-    -- delete old buffer — dapui's cached ref becomes invalid and the
-    -- next `console.buffer()` call creates a fresh buffer
-    pcall(vim.api.nvim_buf_delete, old_buf, { force = true })
-
-    local new_ok, new_buf = pcall(dapui.elements.console.buffer)
-    if not new_ok or not new_buf or not vim.api.nvim_buf_is_valid(new_buf) then return end
-
-    -- rehook the windows
-    for _, win in ipairs(wins) do
-      if vim.api.nvim_win_is_valid(win) then
-        pcall(vim.api.nvim_win_set_buf, win, new_buf)
-      end
-    end
+    if not (ok and dapui.elements and dapui.elements.console) then return end
+    local bok, buf = pcall(dapui.elements.console.buffer)
+    if not bok or not buf or not vim.api.nvim_buf_is_valid(buf) then return end
+    pcall(function()
+      local was_mod = vim.bo[buf].modifiable
+      vim.bo[buf].modifiable = true
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, {})
+      vim.bo[buf].modifiable = was_mod
+    end)
   end
-  -- Fire BEFORE the launch/attach request so the old terminal state
-  -- from the previous run is gone before the new terminal opens.
+  -- Fire before every session-starting verb so old scrollback is gone
+  -- before the new session's output begins.
   dap.listeners.before.launch["turbo-debug-clear-console"]  = clear_console
   dap.listeners.before.attach["turbo-debug-clear-console"]  = clear_console
   dap.listeners.before.restart["turbo-debug-clear-console"] = clear_console

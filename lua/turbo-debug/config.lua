@@ -30,12 +30,8 @@ M.defaults = {
   -- it. Users can click/<CR> to expand manually.
   collapsed_scopes = { "Registers" },
 
-  -- Clear the Console pane on session start/restart. Disabled by default
-  -- because safe clearing is tricky: dapui's console buffer becomes a
-  -- terminal buffer once a session starts, and manipulating terminal
-  -- buffers mid-session destabilizes the adapter. Opt in explicitly if
-  -- you want it and accept the risk.
-  clear_console_on_start = false,
+  -- Clear the Console pane on session start/restart.
+  clear_console_on_start = true,
 
   -- modal keys (active only during debug mode, single-key)
   keys = {
