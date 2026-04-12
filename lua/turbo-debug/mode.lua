@@ -1085,26 +1085,35 @@ function M.enter()
       if active then M._install_for_buf(args.buf) end
     end,
   })
+  -- On editor resize:
+  --   1) if any bar got killed by a shrink-below-minimum, recreate it
+  --   2) re-pin dapui pane sizes (defensive against any plugin — our
+  --      own, another's, or nvim's own shrink-recovery — that might
+  --      have skewed the layout).
+  -- Deferred via vim.schedule so we run AFTER other plugins' handlers.
   vim.api.nvim_create_autocmd("VimResized", {
     group = group,
     callback = function()
-      -- Defer via vim.schedule so our pin runs AFTER any other plugin's
-      -- VimResized handler in the same event-loop tick. The user has
-      -- tiny-equalizer.nvim which runs `tabdo wincmd =` on VimResized,
-      -- equalizing every window — that fights our explicit sizing. By
-      -- re-asserting after them, we restore the layout.
-      vim.schedule(reposition_bars)
+      vim.schedule(function()
+        if not active then return end
+        -- recreate missing bars
+        if not (sbar_win and vim.api.nvim_win_is_valid(sbar_win)) then
+          sbar_win, sbar_buf = nil, nil
+        end
+        if not (cbar_win and vim.api.nvim_win_is_valid(cbar_win)) then
+          cbar_win, cbar_buf = nil, nil
+        end
+        open_bars()   -- idempotent; only creates what's missing
+        pin_dapui_sizes()
+        render_bars()
+      end)
     end,
   })
-  -- WinResized fires on any individual window resize (including user
-  -- mouse-drags on separators, or `wincmd =` from other plugins). We
-  -- re-pin defensively so intentional user resizes stick but drive-by
-  -- equalizer plugins don't wipe our layout.
+  -- WinResized catches mouse-drag resizes and plugin-driven wincmd=
+  -- that don't fire VimResized. Guarded against self-recursion.
   vim.api.nvim_create_autocmd("WinResized", {
     group = group,
     callback = function()
-      -- Only respond to resizes we DIDN'T initiate. Guard with a flag
-      -- so our own pin_dapui_sizes doesn't trigger an infinite loop.
       if M._pinning then return end
       vim.schedule(function()
         if not active then return end
