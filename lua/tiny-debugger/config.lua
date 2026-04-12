@@ -17,6 +17,7 @@ M.defaults = {
     eval = "E",
     terminate = "q",
     restart = "R",
+    clear_breakpoints = "D",
     help = "?",
   },
 

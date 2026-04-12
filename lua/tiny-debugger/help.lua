@@ -13,6 +13,7 @@ local key_labels = {
   run_to_cursor = "Run to cursor",
   breakpoint = "Toggle breakpoint",
   cond_breakpoint = "Conditional breakpoint",
+  clear_breakpoints = "Clear all breakpoints",
   watch = "Watch expression",
   hover = "Hover / inspect",
   eval = "Eval in REPL",
@@ -24,7 +25,7 @@ local key_labels = {
 -- ordered list of key names for consistent display
 local key_order = {
   "continue", "step_over", "step_into", "step_out", "run_to_cursor",
-  "breakpoint", "cond_breakpoint", "watch", "hover", "eval",
+  "breakpoint", "cond_breakpoint", "clear_breakpoints", "watch", "hover", "eval",
   "terminate", "restart", "help",
 }
 

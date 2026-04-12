@@ -39,6 +39,11 @@ function M.setup()
       require("persistent-breakpoints.api").set_conditional_breakpoint()
     end, { silent = true, desc = "tiny-debugger: conditional breakpoint" })
   end
+  if keys.clear_breakpoints then
+    vim.keymap.set("n", keys.clear_breakpoints, function()
+      require("persistent-breakpoints.api").clear_all_breakpoints()
+    end, { silent = true, desc = "tiny-debugger: clear all breakpoints" })
+  end
 end
 
 return M
