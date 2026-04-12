@@ -26,7 +26,7 @@ local function ensure_dapui()
     if active then M.exit() end
   end
 
-  -- set winbar titles on dapui panels
+  -- set winbar titles on dapui panels (REPL gets controls toolbar from dapui)
   local titles = {
     dapui_scopes = " Scopes",
     dapui_watches = " Watches",
@@ -44,15 +44,6 @@ local function ensure_dapui()
           if win ~= -1 then vim.wo[win].winbar = title end
         end)
       end
-    end,
-  })
-  vim.api.nvim_create_autocmd("FileType", {
-    pattern = "dap-repl",
-    callback = function(args)
-      vim.schedule(function()
-        local win = vim.fn.bufwinid(args.buf)
-        if win ~= -1 then vim.wo[win].winbar = " REPL" end
-      end)
     end,
   })
 end

@@ -28,7 +28,13 @@ M.defaults = {
   },
 
   dapui = {
-    controls = { enabled = false },
+    icons = { expanded = "▼", collapsed = "▶", current_frame = "➤" },
+    controls = {
+      enabled = true,
+      element = "repl",
+    },
+    floating = { border = "rounded" },
+    render = { indent = 2, max_type_length = 20 },
     layouts = {
       {
         position = "right",
