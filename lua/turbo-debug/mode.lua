@@ -80,30 +80,42 @@ local ICON = {
 
 local function build_default_layouts()
   local pos = config.opts.sidebar == "right" and "right" or "left"
+
+  -- Console height: 15% of the available vertical space, floored at 5 rows.
+  -- "Available" = screen rows minus our two 3-row bars, the statusline,
+  -- and the cmdline. With Breakpoints at 25% of a much-taller sidebar,
+  -- Bp visibly exceeds Console so the user can see they're separate panes.
+  local top_bar_rows    = 3
+  local bottom_bar_rows = 3
+  local statusline_rows = vim.o.laststatus > 0 and 1 or 0
+  local cmdline_rows    = math.max(1, vim.o.cmdheight)
+  local avail = vim.o.lines - top_bar_rows - bottom_bar_rows - statusline_rows - cmdline_rows
+  if avail < 10 then avail = 10 end
+  local console_size = math.max(5, math.floor(avail * 0.15))
+
+  -- Sidebar width: ideal 40 cols, never less than 25, never more than 1/3
+  -- of tty width. Scales down gracefully on narrow terminals, stops at 40
+  -- on wide ones so the source area stays the star.
+  local sidebar_size = math.max(25, math.min(40, math.floor(vim.o.columns / 3)))
+
   return {
     {
       position = pos,
-      size = 40,
-      -- Order is deliberate:
-      --   1. Call Stack — answers "where am I?" first when paused
-      --   2. Scopes     — "what's the state here?" (updates when you click a
-      --                    frame above, so adjacency is ergonomic)
-      --   3. Watches    — user-curated expressions, less frequently consulted
-      --   4. Breakpoints — maintenance view, accessed rarely during a pause
+      size = sidebar_size,
+      -- Order: Call Stack → Scopes → Watches → Breakpoints.
+      -- Equal 25% share per user preference.
       elements = {
         { id = "stacks",      size = 0.25 },
-        { id = "scopes",      size = 0.40 },
-        { id = "watches",     size = 0.20 },
-        { id = "breakpoints", size = 0.15 },
+        { id = "scopes",      size = 0.25 },
+        { id = "watches",     size = 0.25 },
+        { id = "breakpoints", size = 0.25 },
       },
     },
     {
-      -- Console only; REPL removed because it duplicates Console for most
-      -- workflows and the horizontal space is better spent on program
-      -- output. Users who want a REPL can hit `E` in debug mode to open
-      -- it as a floating widget.
+      -- Console only. REPL removed — hit E in debug mode to open it
+      -- as a floating widget when needed.
       position = "bottom",
-      size = 10,
+      size = console_size,
       elements = {
         { id = "console", size = 1.0 },
       },
@@ -232,7 +244,7 @@ local function render_sbar()
 
   local state, state_hl = dap_state()
 
-  -- layout: [brand]   [status msg]   [state chip]
+  -- layout on content row: [brand]   [status msg]   [state chip]
   local brand_text = " turbo-debug "
   local status_ok, status_msg = pcall(function() return require("dap").status() end)
   if not status_ok then status_msg = "" end
@@ -242,7 +254,6 @@ local function render_sbar()
   local brand_dw = vim.fn.strdisplaywidth(brand_text)
   local chip_dw = vim.fn.strdisplaywidth(state_chip)
 
-  -- fit status msg if too long
   local status_dw = vim.fn.strdisplaywidth(status_msg)
   local available = width - brand_dw - chip_dw - 4
   if status_dw > available and available > 5 then
@@ -255,35 +266,38 @@ local function render_sbar()
 
   local remain = width - brand_dw - status_dw - chip_dw
   if remain < 2 then remain = 2 end
-  -- split evenly on either side of the status msg
   local pad_left = math.floor(remain / 2)
   local pad_right = remain - pad_left
-  local top_line = brand_text .. string.rep(" ", pad_left) .. status_msg .. string.rep(" ", pad_right) .. state_chip
+  local content_line = brand_text .. string.rep(" ", pad_left) .. status_msg .. string.rep(" ", pad_right) .. state_chip
 
+  -- 3 rows: sep / content / sep
   vim.bo[sbar_buf].modifiable = true
-  vim.api.nvim_buf_set_lines(sbar_buf, 0, -1, false, { top_line, sep })
+  vim.api.nvim_buf_set_lines(sbar_buf, 0, -1, false, { sep, content_line, sep })
   vim.bo[sbar_buf].modifiable = false
 
   vim.api.nvim_buf_clear_namespace(sbar_buf, bar_ns, 0, -1)
-  -- brand
+  -- separators
   pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 0, 0, {
-    end_row = 0, end_col = #brand_text, hl_group = "TurboDebugBarBrand",
+    end_row = 0, end_col = #sep, hl_group = "TurboDebugBarSeparator",
   })
-  -- status (middle)
+  pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 2, 0, {
+    end_row = 2, end_col = #sep, hl_group = "TurboDebugBarSeparator",
+  })
+  -- content: brand on left
+  pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 1, 0, {
+    end_row = 1, end_col = #brand_text, hl_group = "TurboDebugBarBrand",
+  })
+  -- status message in the middle
   if status_dw > 0 then
     local status_byte_start = #brand_text + pad_left
-    pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 0, status_byte_start, {
-      end_row = 0, end_col = status_byte_start + #status_msg, hl_group = "TurboDebugBarStatus",
+    pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 1, status_byte_start, {
+      end_row = 1, end_col = status_byte_start + #status_msg, hl_group = "TurboDebugBarStatus",
     })
   end
-  -- state chip (right)
-  local chip_byte_start = #top_line - #state_chip
-  pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 0, chip_byte_start, {
-    end_row = 0, end_col = #top_line, hl_group = state_hl,
-  })
-  -- separator
-  pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 1, 0, {
-    end_row = 1, end_col = #sep, hl_group = "TurboDebugBarSeparator",
+  -- state chip on right
+  local chip_byte_start = #content_line - #state_chip
+  pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 1, chip_byte_start, {
+    end_row = 1, end_col = #content_line, hl_group = state_hl,
   })
 
   sbar_zones = {}
@@ -345,19 +359,23 @@ local function render_cbar()
   if ctrl_pad_left < 1 then ctrl_pad_left = 1 end
   local ctrl_pad_right = ctrl_zone_width - controls_dw - ctrl_pad_left
   if ctrl_pad_right < 1 then ctrl_pad_right = 1 end
-  local bottom_line = string.rep(" ", ctrl_pad_left) .. controls_text .. string.rep(" ", ctrl_pad_right) .. help_text
+  local content_line = string.rep(" ", ctrl_pad_left) .. controls_text .. string.rep(" ", ctrl_pad_right) .. help_text
 
+  -- 3 rows: sep / content / sep
   vim.bo[cbar_buf].modifiable = true
-  vim.api.nvim_buf_set_lines(cbar_buf, 0, -1, false, { sep, bottom_line })
+  vim.api.nvim_buf_set_lines(cbar_buf, 0, -1, false, { sep, content_line, sep })
   vim.bo[cbar_buf].modifiable = false
 
   vim.api.nvim_buf_clear_namespace(cbar_buf, bar_ns, 0, -1)
   pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 0, 0, {
     end_row = 0, end_col = #sep, hl_group = "TurboDebugBarSeparator",
   })
+  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 2, 0, {
+    end_row = 2, end_col = #sep, hl_group = "TurboDebugBarSeparator",
+  })
 
-  -- control labels
-  local ctrl_byte_offset = ctrl_pad_left  -- spaces are 1 byte each
+  -- control labels (content is on row 1, index 1)
+  local ctrl_byte_offset = ctrl_pad_left
   for _, span in ipairs(ctrl_spans) do
     pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, ctrl_byte_offset + span[1], {
       end_row = 1, end_col = ctrl_byte_offset + span[2], hl_group = span[3],
@@ -370,22 +388,22 @@ local function render_cbar()
   end
 
   -- help (right-anchored)
-  local help_byte_start = #bottom_line - #help_text
+  local help_byte_start = #content_line - #help_text
   pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, help_byte_start, {
-    end_row = 1, end_col = #bottom_line, hl_group = "TurboDebugBarCtrl",
+    end_row = 1, end_col = #content_line, hl_group = "TurboDebugBarCtrl",
   })
 
   cbar_zones = {}
   for _, z in ipairs(ctrl_zones_bytes) do
     local byte_start = ctrl_byte_offset + z[1]
     local byte_end = ctrl_byte_offset + z[2]
-    local dcol_start = vim.fn.strdisplaywidth(bottom_line:sub(1, byte_start))
-    local dcol_end   = vim.fn.strdisplaywidth(bottom_line:sub(1, byte_end))
+    local dcol_start = vim.fn.strdisplaywidth(content_line:sub(1, byte_start))
+    local dcol_end   = vim.fn.strdisplaywidth(content_line:sub(1, byte_end))
     cbar_zones[#cbar_zones + 1] = { 2, dcol_start, dcol_end, z[3] }
   end
-  -- help click zone
-  local help_dcol_start = vim.fn.strdisplaywidth(bottom_line:sub(1, help_byte_start))
-  local help_dcol_end   = vim.fn.strdisplaywidth(bottom_line)
+  -- help click zone (also on row 2 since the content is the middle row of 3)
+  local help_dcol_start = vim.fn.strdisplaywidth(content_line:sub(1, help_byte_start))
+  local help_dcol_end   = vim.fn.strdisplaywidth(content_line)
   cbar_zones[#cbar_zones + 1] = { 2, help_dcol_start, help_dcol_end,
                                    function() require("turbo-debug.help").open() end }
 end
@@ -395,45 +413,8 @@ local function render_bars()
   render_cbar()
 end
 
-local function sbar_position()
-  -- 2 rows at the top of the editor, row 0 (below any tabline if present).
-  local top_row = vim.o.showtabline >= 2 and 1 or 0
-  return {
-    relative  = "editor",
-    row       = top_row,
-    col       = 0,
-    width     = vim.o.columns,
-    height    = 2,
-    style     = "minimal",
-    border    = "none",
-    focusable = false,
-    noautocmd = true,
-    zindex    = 50,
-  }
-end
-
-local function cbar_position()
-  -- 2 rows just above the statusline.
-  local row
-  if vim.o.laststatus > 0 then
-    row = vim.o.lines - vim.o.cmdheight - 3  -- 2 (bar) + 1 (statusline)
-  else
-    row = vim.o.lines - vim.o.cmdheight - 2  -- 2 (bar)
-  end
-  if row < 0 then row = 0 end
-  return {
-    relative  = "editor",
-    row       = row,
-    col       = 0,
-    width     = vim.o.columns,
-    height    = 2,
-    style     = "minimal",
-    border    = "none",
-    focusable = false,
-    noautocmd = true,
-    zindex    = 50,
-  }
-end
+-- The bars are SPLITS, not floats. Splits consume real layout rows so
+-- dapui and source windows tuck underneath them naturally — no overlap.
 
 local function handle_sbar_click()
   local pos = vim.fn.getmousepos()
@@ -493,26 +474,51 @@ local function bounce_out(buf)
 end
 
 local function open_bars()
+  -- Both bars are SPLITS, not floats. Splits consume real layout rows
+  -- so dapui and source windows tuck underneath them rather than
+  -- getting overlaid. The caller's original focus is preserved.
+  local caller_win = vim.api.nvim_get_current_win()
+
   -- status bar (top)
   if not (sbar_win and vim.api.nvim_win_is_valid(sbar_win)) then
+    vim.cmd("noautocmd keepalt topleft split")
+    sbar_win = vim.api.nvim_get_current_win()
     sbar_buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_win_set_buf(sbar_win, sbar_buf)
+    vim.api.nvim_win_set_height(sbar_win, 3)
     setup_bar_buf(sbar_buf)
-    sbar_win = vim.api.nvim_open_win(sbar_buf, false, sbar_position())
     setup_bar_win(sbar_win)
+    vim.wo[sbar_win].winfixheight = true
     vim.keymap.set("n", "<LeftMouse>", handle_sbar_click, { buffer = sbar_buf, silent = true, nowait = true })
     vim.keymap.set("n", "<LeftRelease>", "<Nop>", { buffer = sbar_buf, silent = true, nowait = true })
     bounce_out(sbar_buf)
   end
+
+  -- back to caller before creating bottom so topology is predictable
+  if vim.api.nvim_win_is_valid(caller_win) then
+    pcall(vim.api.nvim_set_current_win, caller_win)
+  end
+
   -- control bar (bottom)
   if not (cbar_win and vim.api.nvim_win_is_valid(cbar_win)) then
+    vim.cmd("noautocmd keepalt botright split")
+    cbar_win = vim.api.nvim_get_current_win()
     cbar_buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_win_set_buf(cbar_win, cbar_buf)
+    vim.api.nvim_win_set_height(cbar_win, 3)
     setup_bar_buf(cbar_buf)
-    cbar_win = vim.api.nvim_open_win(cbar_buf, false, cbar_position())
     setup_bar_win(cbar_win)
+    vim.wo[cbar_win].winfixheight = true
     vim.keymap.set("n", "<LeftMouse>", handle_cbar_click, { buffer = cbar_buf, silent = true, nowait = true })
     vim.keymap.set("n", "<LeftRelease>", "<Nop>", { buffer = cbar_buf, silent = true, nowait = true })
     bounce_out(cbar_buf)
   end
+
+  -- restore caller focus
+  if vim.api.nvim_win_is_valid(caller_win) then
+    pcall(vim.api.nvim_set_current_win, caller_win)
+  end
+
   render_bars()
 end
 
@@ -528,12 +534,7 @@ local function close_bars()
 end
 
 local function reposition_bars()
-  if sbar_win and vim.api.nvim_win_is_valid(sbar_win) then
-    pcall(vim.api.nvim_win_set_config, sbar_win, sbar_position())
-  end
-  if cbar_win and vim.api.nvim_win_is_valid(cbar_win) then
-    pcall(vim.api.nvim_win_set_config, cbar_win, cbar_position())
-  end
+  -- Splits auto-track VimResized via winfixheight; just re-render content.
   render_bars()
 end
 
@@ -664,14 +665,22 @@ local function ensure_dapui()
       if buf == -1 or not vim.api.nvim_buf_is_valid(buf) then return end
       local line = math.max(0, (frame.line or 1) - 1)
       local reason = ((body and body.reason) or "stopped"):upper()
+      -- Extmark carries BOTH the virt_text (👈 REASON at EOL) AND a
+      -- sign_text (👉 in the gutter) with high priority. nvim-dap also
+      -- places its own DapStopped sign, but at the same priority as the
+      -- breakpoint sign — which meant whichever was placed later won.
+      -- Our extmark sign at priority 500 always wins, guaranteeing the
+      -- paused line has the finger-pointing icon in the gutter.
       pcall(vim.api.nvim_buf_set_extmark, buf, ip_ns, line, 0, {
+        sign_text     = "\xf0\x9f\x91\x89",  -- 👉 U+1F449
+        sign_hl_group = "DapStopped",
         virt_text = {
           { "  " .. ICON.ip_left .. "  ", "DapStopped" },
           { reason,                       "TurboDebugIPReason" },
         },
         virt_text_pos = "eol",
         hl_mode = "combine",
-        priority = 200,
+        priority = 500,
       })
     end, 50)
   end
