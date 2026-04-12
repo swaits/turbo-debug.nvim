@@ -5,7 +5,9 @@ local M = {}
 
 local active = false
 local active_buf = nil
+local active_win = nil
 local stashed_maps = {}
+local saved_winbar = nil
 
 -- one-time dap-ui and virtual-text initialization
 local dapui_initialized = false
@@ -23,6 +25,36 @@ local function ensure_dapui()
   dap.listeners.after.event_exited["tiny-debugger"] = function()
     if active then M.exit() end
   end
+
+  -- set winbar titles on dapui panels
+  local titles = {
+    dapui_scopes = " Scopes",
+    dapui_watches = " Watches",
+    dapui_stacks = " Call Stack",
+    dapui_console = " Console",
+    dapui_breakpoints = " Breakpoints",
+  }
+  vim.api.nvim_create_autocmd("FileType", {
+    pattern = "dapui_*",
+    callback = function(args)
+      local title = titles[vim.bo[args.buf].filetype]
+      if title then
+        vim.schedule(function()
+          local win = vim.fn.bufwinid(args.buf)
+          if win ~= -1 then vim.wo[win].winbar = title end
+        end)
+      end
+    end,
+  })
+  vim.api.nvim_create_autocmd("FileType", {
+    pattern = "dap-repl",
+    callback = function(args)
+      vim.schedule(function()
+        local win = vim.fn.bufwinid(args.buf)
+        if win ~= -1 then vim.wo[win].winbar = " REPL" end
+      end)
+    end,
+  })
 end
 
 local function ensure_vt()
@@ -48,7 +80,7 @@ local function restore_mapping(buf, lhs)
   if map then
     local rhs = map.rhs or map.callback
     if rhs then
-      vim.keymap.set("n", lhs, rhs, {
+      pcall(vim.keymap.set, "n", lhs, rhs, {
         buffer = buf,
         silent = map.silent == 1,
         noremap = map.noremap == 1,
@@ -124,18 +156,24 @@ local function clear_keymaps(buf)
   stashed_maps = {}
 end
 
--- cursor highlight
+-- debug mode chrome
 
-local saved_cursor_hl = nil
+local function set_debug_chrome()
+  active_win = vim.api.nvim_get_current_win()
+  saved_winbar = vim.wo[active_win].winbar
+  vim.wo[active_win].winbar = "%#DiagnosticError# 🐛 DEBUG %* %f"
 
-local function set_cursor_highlight()
-  saved_cursor_hl = vim.api.nvim_get_hl(0, { name = "Cursor" })
   vim.api.nvim_set_hl(0, "Cursor", { bg = "#ff6600", fg = "#000000" })
 end
 
-local function restore_cursor_highlight()
-  vim.api.nvim_set_hl(0, "Cursor", saved_cursor_hl or {})
-  saved_cursor_hl = nil
+local function clear_debug_chrome()
+  if active_win and vim.api.nvim_win_is_valid(active_win) then
+    vim.wo[active_win].winbar = saved_winbar or ""
+  end
+  active_win = nil
+  saved_winbar = nil
+
+  vim.api.nvim_set_hl(0, "Cursor", {})
 end
 
 -- public API
@@ -147,7 +185,7 @@ function M.enter()
 
   active_buf = vim.api.nvim_get_current_buf()
   set_keymaps(active_buf)
-  set_cursor_highlight()
+  set_debug_chrome()
 
   ensure_dapui()
   require("dapui").open()
@@ -166,7 +204,7 @@ function M.exit()
 
   clear_keymaps(active_buf or vim.api.nvim_get_current_buf())
   active_buf = nil
-  restore_cursor_highlight()
+  clear_debug_chrome()
   help.close()
 
   if dapui_initialized then require("dapui").close() end
