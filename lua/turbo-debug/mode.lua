@@ -134,12 +134,16 @@ local function define_highlights()
   -- default background). StatusLine was too dark and created a visible
   -- seam between the bar and the surrounding panes.
   hl(0, "TurboDebugBar",            { default = true, link = "Normal" })
-  -- FloatBorder — the bright grey most colorschemes use for chrome
-  -- dividers (nightfox: #71839B, same as WinBar.fg so dapui's pane
-  -- header text and our bar separators match). WinSeparator is
-  -- typically much darker (nightfox: #131721) which produced the
-  -- visible "dark line vs bright line" mismatch the user kept hitting.
-  hl(0, "TurboDebugBarSeparator",   { default = true, link = "FloatBorder" })
+  -- Bar separator: fg derived from WinBar.fg at runtime so it matches
+  -- whatever color the user's theme uses for pane-title chrome
+  -- (dapui renders each pane's title in its winbar, so this is
+  -- THE visible "chrome" color). Theme-agnostic — works with any
+  -- colorscheme. Falls back to WinSeparator if WinBar has no fg.
+  -- Re-applied on ColorScheme so theme swaps keep it in sync.
+  --
+  -- Placeholder link so the group exists as a sane default even
+  -- before the derive runs.
+  hl(0, "TurboDebugBarSeparator",   { default = true, link = "WinSeparator" })
   -- Control labels: link to Normal so the text blends with the bar's
   -- Normal-bg surface. StatusLine bg was creating a visible color patch
   -- behind each label. The key letter still pops via TurboDebugBarKey
@@ -170,6 +174,29 @@ local function define_highlights()
   vim.api.nvim_create_autocmd("ColorScheme", {
     group = vim.api.nvim_create_augroup("TurboDebugBarKeyHL", { clear = true }),
     callback = apply_key_hl,
+  })
+
+  -- Separator color: derive from WinBar.fg at runtime. Every theme
+  -- stylistically renders WinBar (pane-title chrome) in a color
+  -- that's intentionally visible against Normal — which is exactly
+  -- the semantic we want for our bar edges. Theme-agnostic. If
+  -- WinBar has no fg (very rare), fall back to WinSeparator so
+  -- we at least match the theme's split-divider convention.
+  local function apply_sep_hl()
+    local ok, src = pcall(vim.api.nvim_get_hl, 0, { name = "WinBar", link = false })
+    if ok and src and src.fg then
+      -- Not `default = true` — we MUST override the placeholder link
+      -- we set in the table-of-defaults above. default semantics
+      -- would leave the placeholder in place.
+      vim.api.nvim_set_hl(0, "TurboDebugBarSeparator", { fg = src.fg })
+      return
+    end
+    vim.api.nvim_set_hl(0, "TurboDebugBarSeparator", { link = "WinSeparator" })
+  end
+  apply_sep_hl()
+  vim.api.nvim_create_autocmd("ColorScheme", {
+    group = vim.api.nvim_create_augroup("TurboDebugBarSepHL", { clear = true }),
+    callback = apply_sep_hl,
   })
 end
 
@@ -282,20 +309,18 @@ local function render_sbar()
   local pad_right = remain - pad_left
   local content_line = brand_text .. string.rep(" ", pad_left) .. status_msg .. string.rep(" ", pad_right) .. state_chip
 
-  -- 3 rows: sep / content / sep. Both separators use
-  -- TurboDebugBarSeparator (→ FloatBorder, the bright grey) so the
-  -- bar is visibly framed top and bottom matching the window-
-  -- separator color the rest of the dapui chrome uses.
+  -- 2 rows: sep / content.
+  -- Only the outward (top) edge gets our separator. The inward (bottom)
+  -- edge abuts dapui's top pane, whose winbar row (pane title like
+  -- "🧊 Call Stack") serves as the visual boundary. Drawing our own
+  -- bottom separator would stack two bright rows of chrome there.
   vim.bo[sbar_buf].modifiable = true
-  vim.api.nvim_buf_set_lines(sbar_buf, 0, -1, false, { sep, content_line, sep })
+  vim.api.nvim_buf_set_lines(sbar_buf, 0, -1, false, { sep, content_line })
   vim.bo[sbar_buf].modifiable = false
 
   vim.api.nvim_buf_clear_namespace(sbar_buf, bar_ns, 0, -1)
   pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 0, 0, {
     end_row = 0, end_col = #sep, hl_group = "TurboDebugBarSeparator",
-  })
-  pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 2, 0, {
-    end_row = 2, end_col = #sep, hl_group = "TurboDebugBarSeparator",
   })
   -- content row
   pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 1, 0, {
@@ -376,37 +401,36 @@ local function render_cbar()
   if ctrl_pad_right < 1 then ctrl_pad_right = 1 end
   local content_line = string.rep(" ", ctrl_pad_left) .. controls_text .. string.rep(" ", ctrl_pad_right) .. help_text
 
-  -- 3 rows: sep / content / sep. Both separators use the bright
-  -- FloatBorder color so the control bar is visibly framed top AND
-  -- bottom, matching the status bar treatment.
+  -- 2 rows: content / sep.
+  -- Only the outward (bottom) edge gets our separator. The inward
+  -- (top) edge abuts dapui's bottom pane (Breakpoints) whose winbar
+  -- row acts as the visual boundary. Drawing our own top separator
+  -- would stack two bright rows of chrome there.
   vim.bo[cbar_buf].modifiable = true
-  vim.api.nvim_buf_set_lines(cbar_buf, 0, -1, false, { sep, content_line, sep })
+  vim.api.nvim_buf_set_lines(cbar_buf, 0, -1, false, { content_line, sep })
   vim.bo[cbar_buf].modifiable = false
 
   vim.api.nvim_buf_clear_namespace(cbar_buf, bar_ns, 0, -1)
-  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 0, 0, {
-    end_row = 0, end_col = #sep, hl_group = "TurboDebugBarSeparator",
-  })
-  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 2, 0, {
-    end_row = 2, end_col = #sep, hl_group = "TurboDebugBarSeparator",
+  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, 0, {
+    end_row = 1, end_col = #sep, hl_group = "TurboDebugBarSeparator",
   })
 
-  -- control labels on row 1 (content row)
+  -- control labels on row 0 (content row)
   local ctrl_byte_offset = ctrl_pad_left
   for _, span in ipairs(ctrl_spans) do
-    pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, ctrl_byte_offset + span[1], {
-      end_row = 1, end_col = ctrl_byte_offset + span[2], hl_group = span[3],
+    pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 0, ctrl_byte_offset + span[1], {
+      end_row = 0, end_col = ctrl_byte_offset + span[2], hl_group = span[3],
     })
   end
   for _, span in ipairs(ctrl_key_spans) do
-    pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, ctrl_byte_offset + span[1], {
-      end_row = 1, end_col = ctrl_byte_offset + span[2], hl_group = "TurboDebugBarKey",
+    pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 0, ctrl_byte_offset + span[1], {
+      end_row = 0, end_col = ctrl_byte_offset + span[2], hl_group = "TurboDebugBarKey",
     })
   end
 
   local help_byte_start = #content_line - #help_text
-  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, help_byte_start, {
-    end_row = 1, end_col = #content_line, hl_group = "TurboDebugBarCtrl",
+  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 0, help_byte_start, {
+    end_row = 0, end_col = #content_line, hl_group = "TurboDebugBarCtrl",
   })
 
   cbar_zones = {}
@@ -415,12 +439,12 @@ local function render_cbar()
     local byte_end = ctrl_byte_offset + z[2]
     local dcol_start = vim.fn.strdisplaywidth(content_line:sub(1, byte_start))
     local dcol_end   = vim.fn.strdisplaywidth(content_line:sub(1, byte_end))
-    -- content is on buffer row 1 = window line 2
-    cbar_zones[#cbar_zones + 1] = { 2, dcol_start, dcol_end, z[3] }
+    -- content is on buffer row 0 = window line 1
+    cbar_zones[#cbar_zones + 1] = { 1, dcol_start, dcol_end, z[3] }
   end
   local help_dcol_start = vim.fn.strdisplaywidth(content_line:sub(1, help_byte_start))
   local help_dcol_end   = vim.fn.strdisplaywidth(content_line)
-  cbar_zones[#cbar_zones + 1] = { 2, help_dcol_start, help_dcol_end,
+  cbar_zones[#cbar_zones + 1] = { 1, help_dcol_start, help_dcol_end,
                                    function() require("turbo-debug.help").open() end }
 end
 
@@ -503,7 +527,7 @@ local function open_bars()
     sbar_win = vim.api.nvim_get_current_win()
     sbar_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_win_set_buf(sbar_win, sbar_buf)
-    vim.api.nvim_win_set_height(sbar_win, 3)
+    vim.api.nvim_win_set_height(sbar_win, 2)
     setup_bar_buf(sbar_buf)
     setup_bar_win(sbar_win)
     vim.wo[sbar_win].winfixheight = true
@@ -522,7 +546,7 @@ local function open_bars()
     cbar_win = vim.api.nvim_get_current_win()
     cbar_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_win_set_buf(cbar_win, cbar_buf)
-    vim.api.nvim_win_set_height(cbar_win, 3)
+    vim.api.nvim_win_set_height(cbar_win, 2)
     setup_bar_buf(cbar_buf)
     setup_bar_win(cbar_win)
     vim.wo[cbar_win].winfixheight = true
