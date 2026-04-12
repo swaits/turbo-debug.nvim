@@ -14,7 +14,7 @@ and persistent-breakpoints into a single cohesive experience with modal
 keybindings. The user installs one plugin and gets everything.
 
 ```lua
-vim.pack.add("swaits/turbo-debug.nvim")
+vim.pack.add("swaits/turbo-debug")
 ```
 
 That's it. That's the whole setup.
@@ -132,7 +132,7 @@ C/C++/Rust only). Out of scope.
 
 ```lua
 -- init.lua
-vim.pack.add("swaits/turbo-debug.nvim")
+vim.pack.add("swaits/turbo-debug")
 ```
 
 One line. One plugin. Everything works.
@@ -582,7 +582,7 @@ Autocmd to close on any keypress. Content built from the keys table.
 
 A user who has never configured DAP should be able to:
 
-1. Add one line to their init.lua: `vim.pack.add("swaits/turbo-debug.nvim")`
+1. Add one line to their init.lua: `vim.pack.add("swaits/turbo-debug")`
 2. Open a file in any of the world's top 10 languages.
 3. Press `x` on a line to set a breakpoint (visible immediately in gutter).
 4. Press `<leader>d` to enter debug mode. See the help box. See the UI.

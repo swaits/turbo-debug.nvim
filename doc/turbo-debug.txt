@@ -36,7 +36,7 @@ Features:
 2. Installation                                 *turbo-debug-installation*
 
 Add one line to your init.lua: >lua
-  vim.pack.add("swaits/turbo-debug.nvim")
+  vim.pack.add("swaits/turbo-debug")
 <
 That's it. All dependencies are managed automatically.
 
