@@ -3,33 +3,39 @@ local loader = require("tiny-debugger.adapters.init")
 local M = {}
 
 local function find_rust_binary()
-  -- build and capture artifact paths
   vim.notify("cargo build ...", vim.log.levels.INFO)
-  local output = vim.fn.system("cargo build --message-format=json 2>/dev/null")
+  local output = vim.fn.system("cargo build --message-format=json")
   if vim.v.shell_error ~= 0 then
-    vim.notify("cargo build failed", vim.log.levels.ERROR)
-    return nil
+    -- extract the human-readable error lines (non-json)
+    local errors = {}
+    for line in output:gmatch("[^\n]+") do
+      if not line:match("^{") then errors[#errors + 1] = line end
+    end
+    vim.notify("cargo build failed:\n" .. table.concat(errors, "\n"), vim.log.levels.ERROR)
+    return vim.fn.input("Path to executable: ", vim.fn.getcwd() .. "/target/debug/", "file")
   end
 
   local executables = {}
   for line in output:gmatch("[^\n]+") do
     local ok, msg = pcall(vim.json.decode, line)
     if ok and msg.reason == "compiler-artifact" and msg.executable then
-      table.insert(executables, msg.executable)
+      executables[#executables + 1] = msg.executable
     end
   end
 
   if #executables == 1 then
     return executables[1]
   elseif #executables > 1 then
-    local choice = vim.fn.inputlist(
-      vim.list_extend({ "Select executable:" },
-        vim.tbl_map(function(e) return "  " .. vim.fn.fnamemodify(e, ":t") end, executables))
-    )
-    return choice > 0 and executables[choice] or nil
+    local items = { "Select executable:" }
+    for i, e in ipairs(executables) do
+      items[i + 1] = i .. ". " .. vim.fn.fnamemodify(e, ":t")
+    end
+    local choice = vim.fn.inputlist(items)
+    if choice > 0 and choice <= #executables then
+      return executables[choice]
+    end
   end
 
-  -- fallback: prompt
   return vim.fn.input("Path to executable: ", vim.fn.getcwd() .. "/target/debug/", "file")
 end
 
@@ -46,7 +52,6 @@ function M.register(dap)
     },
   }
 
-  -- register adapter once
   if not dap.adapters.codelldb then
     dap.adapters.codelldb = adapter
   end
