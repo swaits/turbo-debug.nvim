@@ -82,11 +82,10 @@ local function build_default_layouts()
   local pos = config.opts.sidebar == "right" and "right" or "left"
 
   -- Console height: 15% of the available vertical space, floored at 5 rows.
-  -- "Available" = screen rows minus our two 3-row bars, the statusline,
-  -- and the cmdline. With Breakpoints at 25% of a much-taller sidebar,
-  -- Bp visibly exceeds Console so the user can see they're separate panes.
-  local top_bar_rows    = 3
-  local bottom_bar_rows = 3
+  -- "Available" = screen rows minus the two 2-row bars, the statusline,
+  -- and the cmdline.
+  local top_bar_rows    = 2
+  local bottom_bar_rows = 2
   local statusline_rows = vim.o.laststatus > 0 and 1 or 0
   local cmdline_rows    = math.max(1, vim.o.cmdheight)
   local avail = vim.o.lines - top_bar_rows - bottom_bar_rows - statusline_rows - cmdline_rows
@@ -270,31 +269,27 @@ local function render_sbar()
   local pad_right = remain - pad_left
   local content_line = brand_text .. string.rep(" ", pad_left) .. status_msg .. string.rep(" ", pad_right) .. state_chip
 
-  -- 3 rows: sep / content / sep
+  -- 2 rows: sep / content  (no bottom separator — dapui's pane borders
+  -- act as the visual break between the bar and the source area below)
   vim.bo[sbar_buf].modifiable = true
-  vim.api.nvim_buf_set_lines(sbar_buf, 0, -1, false, { sep, content_line, sep })
+  vim.api.nvim_buf_set_lines(sbar_buf, 0, -1, false, { sep, content_line })
   vim.bo[sbar_buf].modifiable = false
 
   vim.api.nvim_buf_clear_namespace(sbar_buf, bar_ns, 0, -1)
-  -- separators
+  -- top separator
   pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 0, 0, {
     end_row = 0, end_col = #sep, hl_group = "TurboDebugBarSeparator",
-  })
-  pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 2, 0, {
-    end_row = 2, end_col = #sep, hl_group = "TurboDebugBarSeparator",
   })
   -- content: brand on left
   pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 1, 0, {
     end_row = 1, end_col = #brand_text, hl_group = "TurboDebugBarBrand",
   })
-  -- status message in the middle
   if status_dw > 0 then
     local status_byte_start = #brand_text + pad_left
     pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 1, status_byte_start, {
       end_row = 1, end_col = status_byte_start + #status_msg, hl_group = "TurboDebugBarStatus",
     })
   end
-  -- state chip on right
   local chip_byte_start = #content_line - #state_chip
   pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 1, chip_byte_start, {
     end_row = 1, end_col = #content_line, hl_group = state_hl,
@@ -317,8 +312,8 @@ local function render_cbar()
 
   -- Modal control labels. State-dependent text so the label shows what
   -- the key will ACTUALLY do right now:
-  --   no session:  (c) start     (q)uit
-  --   active:      (c)ontinue    (q) terminate
+  --   no session:  (c) start     (q)uit         (Restart hidden)
+  --   active:      (c)ontinue    (q) terminate  (R)estart shown
   local has_session = state ~= "READY"
   local continue_icon = has_session and ICON.go or ICON.start_rkt
   local continue_tail = has_session and "ontinue" or " start"
@@ -329,9 +324,12 @@ local function render_cbar()
     { icon = ICON.step_over, key = keyof("step_over", "s"), tail = "tep",         fn = action("step_over") },
     { icon = ICON.step_into, key = keyof("step_into", "d"), tail = "escend",      fn = action("step_into") },
     { icon = ICON.step_out,  key = keyof("step_out",  "r"), tail = "eturn",       fn = action("step_out")  },
-    { icon = ICON.restart,   key = keyof("restart",   "R"), tail = "estart",      fn = action("restart")   },
-    { icon = ICON.stop,      key = keyof("terminate", "q"), tail = quit_tail,     fn = action("terminate") },
   }
+  -- (R)estart is only meaningful during an active session
+  if has_session then
+    controls[#controls + 1] = { icon = ICON.restart, key = keyof("restart", "R"), tail = "estart", fn = action("restart") }
+  end
+  controls[#controls + 1] = { icon = ICON.stop, key = keyof("terminate", "q"), tail = quit_tail, fn = action("terminate") }
 
   local ctrl_parts = {}
   local ctrl_spans = {}
@@ -361,36 +359,35 @@ local function render_cbar()
   if ctrl_pad_right < 1 then ctrl_pad_right = 1 end
   local content_line = string.rep(" ", ctrl_pad_left) .. controls_text .. string.rep(" ", ctrl_pad_right) .. help_text
 
-  -- 3 rows: sep / content / sep
+  -- 2 rows: content / sep  (no top separator — the source/dapui area
+  -- above has its own pane borders as the visual break)
   vim.bo[cbar_buf].modifiable = true
-  vim.api.nvim_buf_set_lines(cbar_buf, 0, -1, false, { sep, content_line, sep })
+  vim.api.nvim_buf_set_lines(cbar_buf, 0, -1, false, { content_line, sep })
   vim.bo[cbar_buf].modifiable = false
 
   vim.api.nvim_buf_clear_namespace(cbar_buf, bar_ns, 0, -1)
-  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 0, 0, {
-    end_row = 0, end_col = #sep, hl_group = "TurboDebugBarSeparator",
-  })
-  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 2, 0, {
-    end_row = 2, end_col = #sep, hl_group = "TurboDebugBarSeparator",
+  -- bottom separator (on row 1 now since content is on row 0)
+  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, 0, {
+    end_row = 1, end_col = #sep, hl_group = "TurboDebugBarSeparator",
   })
 
-  -- control labels (content is on row 1, index 1)
+  -- control labels on row 0 (content row)
   local ctrl_byte_offset = ctrl_pad_left
   for _, span in ipairs(ctrl_spans) do
-    pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, ctrl_byte_offset + span[1], {
-      end_row = 1, end_col = ctrl_byte_offset + span[2], hl_group = span[3],
+    pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 0, ctrl_byte_offset + span[1], {
+      end_row = 0, end_col = ctrl_byte_offset + span[2], hl_group = span[3],
     })
   end
   for _, span in ipairs(ctrl_key_spans) do
-    pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, ctrl_byte_offset + span[1], {
-      end_row = 1, end_col = ctrl_byte_offset + span[2], hl_group = "TurboDebugBarKey",
+    pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 0, ctrl_byte_offset + span[1], {
+      end_row = 0, end_col = ctrl_byte_offset + span[2], hl_group = "TurboDebugBarKey",
     })
   end
 
-  -- help (right-anchored)
+  -- help (right-anchored) on row 0
   local help_byte_start = #content_line - #help_text
-  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, help_byte_start, {
-    end_row = 1, end_col = #content_line, hl_group = "TurboDebugBarCtrl",
+  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 0, help_byte_start, {
+    end_row = 0, end_col = #content_line, hl_group = "TurboDebugBarCtrl",
   })
 
   cbar_zones = {}
@@ -399,12 +396,12 @@ local function render_cbar()
     local byte_end = ctrl_byte_offset + z[2]
     local dcol_start = vim.fn.strdisplaywidth(content_line:sub(1, byte_start))
     local dcol_end   = vim.fn.strdisplaywidth(content_line:sub(1, byte_end))
-    cbar_zones[#cbar_zones + 1] = { 2, dcol_start, dcol_end, z[3] }
+    -- content is on buffer row 0 = window line 1
+    cbar_zones[#cbar_zones + 1] = { 1, dcol_start, dcol_end, z[3] }
   end
-  -- help click zone (also on row 2 since the content is the middle row of 3)
   local help_dcol_start = vim.fn.strdisplaywidth(content_line:sub(1, help_byte_start))
   local help_dcol_end   = vim.fn.strdisplaywidth(content_line)
-  cbar_zones[#cbar_zones + 1] = { 2, help_dcol_start, help_dcol_end,
+  cbar_zones[#cbar_zones + 1] = { 1, help_dcol_start, help_dcol_end,
                                    function() require("turbo-debug.help").open() end }
 end
 
@@ -485,7 +482,7 @@ local function open_bars()
     sbar_win = vim.api.nvim_get_current_win()
     sbar_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_win_set_buf(sbar_win, sbar_buf)
-    vim.api.nvim_win_set_height(sbar_win, 3)
+    vim.api.nvim_win_set_height(sbar_win, 2)
     setup_bar_buf(sbar_buf)
     setup_bar_win(sbar_win)
     vim.wo[sbar_win].winfixheight = true
@@ -505,7 +502,7 @@ local function open_bars()
     cbar_win = vim.api.nvim_get_current_win()
     cbar_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_win_set_buf(cbar_win, cbar_buf)
-    vim.api.nvim_win_set_height(cbar_win, 3)
+    vim.api.nvim_win_set_height(cbar_win, 2)
     setup_bar_buf(cbar_buf)
     setup_bar_win(cbar_win)
     vim.wo[cbar_win].winfixheight = true
@@ -598,13 +595,26 @@ local function schedule_console_redraw()
   end, config.opts.console_refresh_ms or 50)
 end
 
-local function ensure_dapui()
-  if dapui_initialized then return end
-  dapui_initialized = true
+-- Call dapui.setup each M.enter() so the layout is recomputed against
+-- current terminal dimensions AND against whatever splits our bars have
+-- pinned at top and bottom. Otherwise dapui caches first-call sizes and
+-- re-entering debug mode lays out against stale dimensions (Console
+-- ballooning, sidebar proportions drifting away from 25% each — the
+-- exact bug the user reported on second toggle).
+local function refresh_dapui_layouts()
   local dapui_opts = vim.deepcopy(config.opts.dapui)
   if not dapui_opts.layouts then dapui_opts.layouts = build_default_layouts() end
   require("dapui").setup(dapui_opts)
   patch_format_value()
+end
+
+local function ensure_dapui()
+  if dapui_initialized then
+    refresh_dapui_layouts()
+    return
+  end
+  dapui_initialized = true
+  refresh_dapui_layouts()
 
   local dap = require("dap")
   dap.listeners.after.event_initialized["turbo-debug"] = function()
@@ -687,6 +697,42 @@ local function ensure_dapui()
   dap.listeners.after.event_continued["turbo-debug-ip"]  = function() clear_ip() end
   dap.listeners.before.event_terminated["turbo-debug-ip"] = function() clear_ip() end
   dap.listeners.before.event_exited["turbo-debug-ip"]     = function() clear_ip() end
+
+  -- Clear the Console pane on session start/restart. Runs BEFORE the
+  -- adapter emits output so the new session's log starts clean.
+  local function clear_console()
+    if not config.opts.clear_console_on_start then return end
+    local ok, dapui = pcall(require, "dapui")
+    if not ok then return end
+    local buf_ok, buf = pcall(function() return dapui.elements.console.buffer() end)
+    if not buf_ok or not buf or not vim.api.nvim_buf_is_valid(buf) then return end
+    pcall(function()
+      local prev = vim.bo[buf].modifiable
+      vim.bo[buf].modifiable = true
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, {})
+      vim.bo[buf].modifiable = prev
+    end)
+  end
+  dap.listeners.before.event_initialized["turbo-debug-clear-console"] = clear_console
+
+  -- Default-collapse scopes the user considers noisy (Registers on
+  -- codelldb, for example). We intercept the scopes response and set
+  -- `expensive = true` on any matching scope — dapui's own component
+  -- auto-collapses anything marked expensive (see dapui/components/
+  -- scopes.lua line 22-24), so this reuses their existing mechanism.
+  dap.listeners.before.scopes["turbo-debug-collapse"] = function(_, _, response, _)
+    local collapse = config.opts.collapsed_scopes
+    if not (collapse and #collapse > 0) then return end
+    if not (response and response.scopes) then return end
+    for _, scope in ipairs(response.scopes) do
+      for _, name in ipairs(collapse) do
+        if scope.name == name then
+          scope.expensive = true
+          break
+        end
+      end
+    end
+  end
 
   -- winbar titles on dapui panes — colorful emoji for instant pane
   -- recognition. REPL is iconless per user preference (its prompt is
@@ -978,9 +1024,14 @@ function M.enter()
   end
 
   set_debug_chrome()
+  -- Bars BEFORE dapui.open so the sidebar and bottom tray compute their
+  -- proportions against the screen MINUS our bars, not against the full
+  -- screen. Calling ensure_dapui() here re-runs dapui.setup with freshly-
+  -- computed layout sizes based on current terminal dimensions — this is
+  -- what fixes the "Console balloons on second toggle" bug.
+  open_bars()
   ensure_dapui()
   require("dapui").open()
-  open_bars()
 
   -- second install pass after dapui has created its buffers
   vim.schedule(function()

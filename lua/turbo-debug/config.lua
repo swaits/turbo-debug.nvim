@@ -22,6 +22,18 @@ M.defaults = {
   -- outputs. Trailing-edge — max 1000/console_refresh_ms redraws per second.
   console_refresh_ms = 50,
 
+  -- Scope names (from the DAP adapter) to default-collapse. dapui auto-
+  -- collapses scopes that the adapter marks `expensive`, but many adapters
+  -- (codelldb for Rust/C++, for example) don't mark Registers expensive
+  -- even though it's a huge dump. Any scope name in this list is treated
+  -- as expensive by intercepting the `scopes` response before dapui sees
+  -- it. Users can click/<CR> to expand manually.
+  collapsed_scopes = { "Registers" },
+
+  -- Clear the Console pane on session start/restart so old output from a
+  -- previous run doesn't linger. Set false to preserve across runs.
+  clear_console_on_start = true,
+
   -- modal keys (active only during debug mode, single-key)
   keys = {
     continue = "c",
