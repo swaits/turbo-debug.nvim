@@ -1143,6 +1143,21 @@ function M.enter()
     end)
   end
   vim.api.nvim_create_autocmd("VimResized", { group = group, callback = recover_chrome })
+  -- WinResized fires when any window's geometry changes — including
+  -- the shift that happens when bufferline's tabline disappears (the
+  -- tabline row gets reclaimed, all windows shift up). At that point
+  -- nvim re-renders at the new positions but doesn't always clear
+  -- the pixels where the old render was, producing the "duplicate
+  -- status bar rows" artifact. Forcing a full redraw here wipes the
+  -- stale pixels. We don't re-pin dapui sizes so user manual resizes
+  -- still stick.
+  vim.api.nvim_create_autocmd("WinResized", {
+    group = group,
+    callback = function()
+      if not active then return end
+      vim.schedule(function() pcall(vim.cmd, "redraw!") end)
+    end,
+  })
   vim.api.nvim_create_autocmd("OptionSet", {
     group = group,
     pattern = "showtabline",
