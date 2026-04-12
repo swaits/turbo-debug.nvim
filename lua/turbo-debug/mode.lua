@@ -25,17 +25,14 @@ local cbar_win, cbar_buf = nil, nil
 -- installed[buf][name] = { key = lhs, prev_n = <prev n-mode map>, prev_v = <prev v-mode map> }
 local installed = {}
 
--- Saved across M.enter → M.exit so we can restore the user's global
--- fillchars. With `laststatus=3`, nvim draws a horizontal separator row
--- between every pair of stacked windows using the `horiz` fillchar
--- (default `─`) painted with WinSeparator.fg. In themes with dark
--- WinSeparator.fg (nordfox uses #232831) that renders as a dim grey row
--- sandwiched between our bright bar separator and the neighboring dapui
--- pane — the "second darker line below the status bar" the user sees.
--- We replace horiz/horizup/horizdown with space during debug mode so
--- nvim has nothing visible to draw between stacked windows; our own
--- bar rows serve as the only chrome.
-local saved_fillchars = nil
+-- Tracks the total vertical rows currently available to the dapui layout
+-- (sum of all open dapui pane heights). When this changes — e.g. bufferline
+-- tabline appears or disappears, reclaiming/returning a row — dapui's
+-- `win_states.size` proportions go stale (dapui has no WinResized listener
+-- of its own), and nvim arbitrarily gives the delta row to one pane, which
+-- then renders EOB `~` below its content. On detected change we re-pin to
+-- our initial proportions.
+local last_dapui_total_height = nil
 
 local dapui_initialized = false
 local vt_initialized = false
@@ -329,20 +326,17 @@ local function render_sbar()
   local pad_right = remain - pad_left
   local content_line = brand_text .. string.rep(" ", pad_left) .. status_msg .. string.rep(" ", pad_right) .. state_chip
 
-  -- 3 rows: top sep / content / bottom sep. BOTH edges use the bright
-  -- TurboDebugBarSeparator color so the bar reads as a clearly framed
-  -- region regardless of what sits above or below (tabline, dapui pane,
-  -- source buffer — all have different chrome conventions).
+  -- 2 rows: top sep / content. Only the outward (top) edge gets a bright
+  -- separator; the inward edge abuts dapui's top pane (whose winbar and
+  -- nvim's own horiz separator serve as the visual boundary there). Keeps
+  -- the bar's vertical footprint minimal.
   vim.bo[sbar_buf].modifiable = true
-  vim.api.nvim_buf_set_lines(sbar_buf, 0, -1, false, { sep, content_line, sep })
+  vim.api.nvim_buf_set_lines(sbar_buf, 0, -1, false, { sep, content_line })
   vim.bo[sbar_buf].modifiable = false
 
   vim.api.nvim_buf_clear_namespace(sbar_buf, bar_ns, 0, -1)
   pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 0, 0, {
     end_row = 0, end_col = #sep, hl_group = "TurboDebugBarSeparator",
-  })
-  pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 2, 0, {
-    end_row = 2, end_col = #sep, hl_group = "TurboDebugBarSeparator",
   })
   -- content row
   pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 1, 0, {
@@ -423,37 +417,34 @@ local function render_cbar()
   if ctrl_pad_right < 1 then ctrl_pad_right = 1 end
   local content_line = string.rep(" ", ctrl_pad_left) .. controls_text .. string.rep(" ", ctrl_pad_right) .. help_text
 
-  -- 3 rows: top sep / content / bottom sep. Both edges bright for a
-  -- visible frame, independent of what sits above (dapui Console) or
-  -- below (statusline/tabline).
+  -- 2 rows: content / bottom sep. Only the outward (bottom) edge gets a
+  -- bright separator; the inward edge abuts dapui Console (whose winbar
+  -- + nvim's own horiz separator serve as the visual boundary there).
   vim.bo[cbar_buf].modifiable = true
-  vim.api.nvim_buf_set_lines(cbar_buf, 0, -1, false, { sep, content_line, sep })
+  vim.api.nvim_buf_set_lines(cbar_buf, 0, -1, false, { content_line, sep })
   vim.bo[cbar_buf].modifiable = false
 
   vim.api.nvim_buf_clear_namespace(cbar_buf, bar_ns, 0, -1)
-  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 0, 0, {
-    end_row = 0, end_col = #sep, hl_group = "TurboDebugBarSeparator",
-  })
-  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 2, 0, {
-    end_row = 2, end_col = #sep, hl_group = "TurboDebugBarSeparator",
+  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, 0, {
+    end_row = 1, end_col = #sep, hl_group = "TurboDebugBarSeparator",
   })
 
-  -- control labels on row 1 (content row)
+  -- control labels on row 0 (content row)
   local ctrl_byte_offset = ctrl_pad_left
   for _, span in ipairs(ctrl_spans) do
-    pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, ctrl_byte_offset + span[1], {
-      end_row = 1, end_col = ctrl_byte_offset + span[2], hl_group = span[3],
+    pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 0, ctrl_byte_offset + span[1], {
+      end_row = 0, end_col = ctrl_byte_offset + span[2], hl_group = span[3],
     })
   end
   for _, span in ipairs(ctrl_key_spans) do
-    pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, ctrl_byte_offset + span[1], {
-      end_row = 1, end_col = ctrl_byte_offset + span[2], hl_group = "TurboDebugBarKey",
+    pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 0, ctrl_byte_offset + span[1], {
+      end_row = 0, end_col = ctrl_byte_offset + span[2], hl_group = "TurboDebugBarKey",
     })
   end
 
   local help_byte_start = #content_line - #help_text
-  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, help_byte_start, {
-    end_row = 1, end_col = #content_line, hl_group = "TurboDebugBarCtrl",
+  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 0, help_byte_start, {
+    end_row = 0, end_col = #content_line, hl_group = "TurboDebugBarCtrl",
   })
 
   cbar_zones = {}
@@ -462,12 +453,12 @@ local function render_cbar()
     local byte_end = ctrl_byte_offset + z[2]
     local dcol_start = vim.fn.strdisplaywidth(content_line:sub(1, byte_start))
     local dcol_end   = vim.fn.strdisplaywidth(content_line:sub(1, byte_end))
-    -- content is on buffer row 1 = window line 2
-    cbar_zones[#cbar_zones + 1] = { 2, dcol_start, dcol_end, z[3] }
+    -- content is on buffer row 0 = window line 1
+    cbar_zones[#cbar_zones + 1] = { 1, dcol_start, dcol_end, z[3] }
   end
   local help_dcol_start = vim.fn.strdisplaywidth(content_line:sub(1, help_byte_start))
   local help_dcol_end   = vim.fn.strdisplaywidth(content_line)
-  cbar_zones[#cbar_zones + 1] = { 2, help_dcol_start, help_dcol_end,
+  cbar_zones[#cbar_zones + 1] = { 1, help_dcol_start, help_dcol_end,
                                    function() require("turbo-debug.help").open() end }
 end
 
@@ -564,7 +555,7 @@ local function open_bars()
     sbar_win = vim.api.nvim_get_current_win()
     sbar_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_win_set_buf(sbar_win, sbar_buf)
-    vim.api.nvim_win_set_height(sbar_win, 3)
+    vim.api.nvim_win_set_height(sbar_win, 2)
     setup_bar_buf(sbar_buf)
     setup_bar_win(sbar_win)
     vim.wo[sbar_win].winfixheight = true
@@ -583,7 +574,7 @@ local function open_bars()
     cbar_win = vim.api.nvim_get_current_win()
     cbar_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_win_set_buf(cbar_win, cbar_buf)
-    vim.api.nvim_win_set_height(cbar_win, 3)
+    vim.api.nvim_win_set_height(cbar_win, 2)
     setup_bar_buf(cbar_buf)
     setup_bar_win(cbar_win)
     vim.wo[cbar_win].winfixheight = true
@@ -658,39 +649,46 @@ local function close_bars()
   sbar_zones, cbar_zones = {}, {}
 end
 
-local function hide_horiz_separators()
-  if saved_fillchars ~= nil then return end
-  saved_fillchars = vim.o.fillchars
-  local fc = vim.opt.fillchars:get()
-  fc.horiz     = " "
-  fc.horizup   = " "
-  fc.horizdown = " "
-  vim.opt.fillchars = fc
-end
-
-local function restore_horiz_separators()
-  if saved_fillchars == nil then return end
-  vim.o.fillchars = saved_fillchars
-  saved_fillchars = nil
-end
-
 -- nvim sometimes *squishes* a bar to 0 rows rather than closing it when
 -- grid pressure spikes (notably: bufferline's tabline flipping visible on
 -- buffer-count change reclaims one row from somewhere, and `winfixheight`
 -- is only a preference not a guarantee). The window object stays valid;
--- the content just becomes invisible. Force each bar back to 3 rows any
+-- the content just becomes invisible. Force each bar back to 2 rows any
 -- time we detect it shrunk below that.
 local function ensure_bar_heights()
   if sbar_win and vim.api.nvim_win_is_valid(sbar_win) then
-    if vim.api.nvim_win_get_height(sbar_win) < 3 then
-      pcall(vim.api.nvim_win_set_height, sbar_win, 3)
+    if vim.api.nvim_win_get_height(sbar_win) < 2 then
+      pcall(vim.api.nvim_win_set_height, sbar_win, 2)
     end
   end
   if cbar_win and vim.api.nvim_win_is_valid(cbar_win) then
-    if vim.api.nvim_win_get_height(cbar_win) < 3 then
-      pcall(vim.api.nvim_win_set_height, cbar_win, 3)
+    if vim.api.nvim_win_get_height(cbar_win) < 2 then
+      pcall(vim.api.nvim_win_set_height, cbar_win, 2)
     end
   end
+end
+
+-- Sum the heights of all currently-open dapui pane windows. Used to detect
+-- external geometry changes (tabline toggle) without false-positive firing
+-- on user-internal resizes (which redistribute within the total area
+-- without changing it).
+local function compute_dapui_total_height()
+  local total = 0
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_valid(buf) then
+      local ft = vim.bo[buf].filetype
+      if ft == "dapui_stacks" or ft == "dapui_scopes" or ft == "dapui_watches"
+         or ft == "dapui_breakpoints" or ft == "dapui_console" or ft == "dap-repl" then
+        for _, win in ipairs(vim.fn.win_findbuf(buf)) do
+          if vim.api.nvim_win_is_valid(win)
+             and vim.api.nvim_win_get_config(win).relative == "" then
+            total = total + vim.api.nvim_win_get_height(win)
+          end
+        end
+      end
+    end
+  end
+  return total
 end
 
 local function reposition_bars()
@@ -1201,7 +1199,6 @@ function M.enter()
   if active then return end
   active = true
   define_highlights()
-  hide_horiz_separators()
   setup_actions()
 
   local group = vim.api.nvim_create_augroup("TurboDebugModalKeys", { clear = true })
@@ -1212,8 +1209,9 @@ function M.enter()
     end,
   })
   -- Editor resize: recreate any bar that got killed, un-squish any that
-  -- got shrunk below 3 rows, then re-render. dapui sizes are left alone
-  -- so user manual resizes stick.
+  -- got shrunk below 2 rows, then re-render. VimResized always changes
+  -- the dapui area total (since vim.o.lines changed), so we re-pin
+  -- proportions and update the cached total.
   vim.api.nvim_create_autocmd("VimResized", {
     group = group,
     callback = function()
@@ -1227,16 +1225,23 @@ function M.enter()
         end
         open_bars()
         ensure_bar_heights()
+        pin_dapui_sizes()
+        last_dapui_total_height = compute_dapui_total_height()
         render_bars()
       end)
     end,
   })
   -- WinResized fires on any geometry change: mouse-drags on split
   -- borders, bufferline's tabline appearing/disappearing (which
-  -- reclaims a row and squishes `winfixheight` bars down), `wincmd =`,
-  -- etc. Cheap O(1): validate and un-squish only when something
-  -- actually shifted. Always finishes with redraw! to clear stale
-  -- pixels from the shift.
+  -- reclaims/returns a row and can squish our bars), `wincmd =`, etc.
+  -- Two separate concerns handled here:
+  --   1. Bars squished / killed → recreate + force heights.
+  --   2. Total dapui area changed (tabline toggle) → re-pin proportions
+  --      so no pane ends up taller than its buffer (EOB `~` bug).
+  -- We distinguish case 2 from a user-internal resize (dragging the
+  -- Scopes/Watches border) by comparing the TOTAL dapui height against
+  -- last_dapui_total_height. User-internal resizes redistribute within
+  -- the total; they don't change it — so their customization survives.
   vim.api.nvim_create_autocmd("WinResized", {
     group = group,
     callback = function()
@@ -1252,6 +1257,13 @@ function M.enter()
           open_bars()
         end
         ensure_bar_heights()
+        local dapui_total = compute_dapui_total_height()
+        if last_dapui_total_height ~= nil
+           and dapui_total ~= last_dapui_total_height then
+          pin_dapui_sizes()
+          dapui_total = compute_dapui_total_height()
+        end
+        last_dapui_total_height = dapui_total
         render_bars()
         pcall(vim.cmd, "redraw!")
       end)
@@ -1281,6 +1293,10 @@ function M.enter()
     end
     pin_dapui_sizes()
     render_bars()
+    -- Seed the dapui-area baseline AFTER the final layout settles, so
+    -- the first WinResized (e.g. bufferline tabline appearing) sees a
+    -- valid reference point to compare against.
+    last_dapui_total_height = compute_dapui_total_height()
   end)
 
   ensure_vt()
@@ -1307,7 +1323,7 @@ function M.exit()
   if dapui_initialized then require("dapui").close() end
   close_bars()
   if vt_initialized then require("nvim-dap-virtual-text").disable() end
-  restore_horiz_separators()
+  last_dapui_total_height = nil
 end
 
 function M.toggle()
