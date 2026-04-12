@@ -27,16 +27,16 @@ function M.setup()
   vim.fn.sign_define("DapLogPoint", { text = "📝", texthl = "DapLogPoint" })
 
   -- global mappings (work outside debug mode)
-  local keys = config.opts.keys
+  local gk = config.opts.global_keys
   local pb = require("persistent-breakpoints.api")
   local bindings = {
-    { keys.breakpoint, pb.toggle_breakpoint, "toggle breakpoint" },
-    { keys.cond_breakpoint, pb.set_conditional_breakpoint, "conditional breakpoint" },
-    { keys.clear_breakpoints, pb.clear_all_breakpoints, "clear all breakpoints" },
+    { gk.breakpoint, pb.toggle_breakpoint, "Toggle breakpoint" },
+    { gk.cond_breakpoint, pb.set_conditional_breakpoint, "Conditional breakpoint" },
+    { gk.clear_breakpoints, pb.clear_all_breakpoints, "Clear all breakpoints" },
   }
   for _, b in ipairs(bindings) do
     if b[1] then
-      vim.keymap.set("n", b[1], b[2], { silent = true, desc = "tiny-debugger: " .. b[3] })
+      vim.keymap.set("n", b[1], b[2], { silent = true, desc = b[3] })
     end
   end
 end

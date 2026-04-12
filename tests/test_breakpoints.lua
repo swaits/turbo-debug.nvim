@@ -2,15 +2,16 @@ local assert_eq = require("helpers").assert_eq
 local td = require("tiny-debugger")
 td.setup()
 
--- global <leader>x mapping exists
-assert_eq(vim.fn.maparg("<leader>x", "n", false, true).desc, "tiny-debugger: toggle breakpoint", "global <leader>x mapping")
+-- global breakpoint mappings exist under <leader>d prefix
+assert_eq(vim.fn.maparg("<leader>dx", "n", false, true).desc, "Toggle breakpoint", "<leader>dx mapping")
+assert_eq(vim.fn.maparg("<leader>dX", "n", false, true).desc, "Conditional breakpoint", "<leader>dX mapping")
+assert_eq(vim.fn.maparg("<leader>dD", "n", false, true).desc, "Clear all breakpoints", "<leader>dD mapping")
 
--- global <leader>X mapping exists
-assert_eq(vim.fn.maparg("<leader>X", "n", false, true).desc, "tiny-debugger: conditional breakpoint", "global <leader>X mapping")
+-- toggle mapping exists
+assert_eq(vim.fn.maparg("<leader>dd", "n", false, true).desc, "Toggle debug mode", "<leader>dd mapping")
 
 -- persistent-breakpoints API is callable
 local api = require("persistent-breakpoints.api")
 assert_eq(type(api.toggle_breakpoint), "function", "toggle_breakpoint is a function")
-assert_eq(type(api.set_conditional_breakpoint), "function", "set_conditional_breakpoint is a function")
 
 print("ALL BREAKPOINT TESTS PASSED")

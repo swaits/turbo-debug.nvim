@@ -106,17 +106,22 @@ Default keymap:
   `R`     Restart session           Rerun
   `?`     Help popup                Show keybindings
 
-Always available (not part of debug mode):
+Always available (under `<leader>d` prefix, with which-key support):
 
-  `<leader>x`   Toggle breakpoint         X marks the spot
-  `<leader>X`   Conditional breakpoint    Shift variant
-  `<leader>D`   Clear all breakpoints     Delete all
+  `<leader>dd`  Toggle debug mode
+  `<leader>dx`  Toggle breakpoint         X marks the spot
+  `<leader>dX`  Conditional breakpoint    Shift variant
+  `<leader>dD`  Clear all breakpoints     Delete all
 
 Override any key: >lua
   require("tiny-debugger").setup({
-    keys = {
-      continue = "g",       -- remap continue to g
-      step_over = false,    -- disable step_over binding
+    keys = {                          -- modal keys (debug mode only)
+      continue = "g",
+      step_over = false,              -- set to false to disable
+    },
+    global_keys = {                   -- always-available keys
+      toggle = "<leader>DD",
+      breakpoint = "<leader>db",
     },
   })
 <

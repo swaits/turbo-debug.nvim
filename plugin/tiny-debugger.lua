@@ -11,11 +11,12 @@ vim.pack.add({ "nvim-neotest/nvim-nio" })
 vim.pack.add({ "theHamsta/nvim-dap-virtual-text" })
 vim.pack.add({ "Weissle/persistent-breakpoints.nvim" })
 
+-- register which-key group if available
+pcall(function()
+  require("which-key").add({ { "<leader>d", group = "debug" } })
+end)
+
 -- defer setup so user has time to call setup() with overrides
 vim.schedule(function()
   require("tiny-debugger").setup()
 end)
-
-vim.keymap.set("n", "<leader>d", function()
-  require("tiny-debugger").toggle()
-end, { silent = true, desc = "tiny-debugger: toggle debug mode" })

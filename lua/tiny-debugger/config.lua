@@ -4,21 +4,27 @@ M.defaults = {
   help_on_enter = true,
   builtin_adapters = true,
 
+  -- modal keys (active only during debug mode, single-key)
   keys = {
     continue = "c",
     step_over = "s",
     step_into = "d",
     step_out = "r",
     run_to_cursor = "C",
-    breakpoint = "<leader>x",
-    cond_breakpoint = "<leader>X",
     watch = "W",
     hover = "K",
     eval = "E",
     terminate = "q",
     restart = "R",
-    clear_breakpoints = "<leader>D",
     help = "?",
+  },
+
+  -- global keys (always available, <leader>d prefix)
+  global_keys = {
+    toggle = "<leader>dd",
+    breakpoint = "<leader>dx",
+    cond_breakpoint = "<leader>dX",
+    clear_breakpoints = "<leader>dD",
   },
 
   dapui = {
@@ -58,9 +64,13 @@ M.opts = M.defaults
 
 function M.merge(user_opts)
   M.opts = vim.tbl_deep_extend("force", vim.deepcopy(M.defaults), user_opts or {})
-  if user_opts and user_opts.keys then
-    for k, v in pairs(user_opts.keys) do
-      if v == false then M.opts.keys[k] = false end
+  if user_opts then
+    for _, tbl_name in ipairs({ "keys", "global_keys" }) do
+      if user_opts[tbl_name] then
+        for k, v in pairs(user_opts[tbl_name]) do
+          if v == false then M.opts[tbl_name][k] = false end
+        end
+      end
     end
   end
   return M.opts

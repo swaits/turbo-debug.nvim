@@ -14,26 +14,25 @@ That's it. No other config needed. See `:help tiny-debugger` for customization.
 
 ## Usage
 
-`<leader>d` toggles debug mode. `<leader>x` sets breakpoints (works anytime).
+Everything lives under `<leader>d` (with which-key support if installed):
+
+| Key | Action | Available |
+|-----|--------|-----------|
+| `<leader>dd` | Toggle debug mode | Always |
+| `<leader>dx` | Toggle breakpoint | Always |
+| `<leader>dX` | Conditional breakpoint | Always |
+| `<leader>dD` | Clear all breakpoints | Always |
 
 During debug mode, single-key controls:
 
-| Key | Action                 | Key | Action                 |
-|-----|------------------------|-----|------------------------|
-| `c` | Continue               | `W` | Watch expression       |
-| `s` | Step over              | `K` | Hover / inspect        |
-| `d` | Step into              | `E` | Eval in REPL           |
-| `r` | Step out               | `q` | Terminate session      |
-| `C` | Run to cursor          | `R` | Restart session        |
-| `?` | Help popup             |     |                        |
-
-Always available (no debug mode needed):
-
-| Key | Action                 |
-|-----|------------------------|
-| `<leader>x` | Toggle breakpoint      |
-| `<leader>X` | Conditional breakpoint |
-| `<leader>D` | Clear all breakpoints  |
+| Key | Action | Key | Action |
+|-----|--------|-----|--------|
+| `c` | Continue | `W` | Watch expression |
+| `s` | Step over | `K` | Hover / inspect |
+| `d` | Step into | `E` | Eval in REPL |
+| `r` | Step out | `q` | Terminate session |
+| `C` | Run to cursor | `R` | Restart session |
+| `?` | Help popup | | |
 
 All navigation keys preserved. Modal keybindings vanish when you exit debug mode.
 
@@ -41,14 +40,14 @@ All navigation keys preserved. Modal keybindings vanish when you exit debug mode
 
 Adapter binaries must be installed (via mason, package manager, etc).
 
-| Language        | Adapter    | Language     | Adapter            |
-|-----------------|------------|--------------|--------------------|
-| Python          | debugpy    | C#           | netcoredbg         |
-| JavaScript / TS | js-debug   | Java         | java-debug-adapter |
-| Go              | delve      | Kotlin       | kotlin-debug       |
-| C / C++         | codelldb   | PHP          | php-debug          |
-| Rust            | codelldb   | Ruby         | rdbg               |
-| Swift           | codelldb   | Lua (Neovim) | osv                |
+| Language | Adapter | Language | Adapter |
+|----------|---------|----------|---------|
+| Python | debugpy | C# | netcoredbg |
+| JavaScript / TS | js-debug | Java | java-debug-adapter |
+| Go | delve | Kotlin | kotlin-debug |
+| C / C++ | codelldb | PHP | php-debug |
+| Rust | codelldb | Ruby | rdbg |
+| Swift | codelldb | Lua (Neovim) | osv |
 
 ## License
 

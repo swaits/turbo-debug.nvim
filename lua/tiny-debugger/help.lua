@@ -5,15 +5,12 @@ local M = {}
 local win_id = nil
 local buf_id = nil
 
-local key_info = {
+local modal_info = {
   { "continue", "Continue" },
   { "step_over", "Step over" },
   { "step_into", "Step into" },
   { "step_out", "Step out" },
   { "run_to_cursor", "Run to cursor" },
-  { "breakpoint", "Toggle breakpoint" },
-  { "cond_breakpoint", "Conditional breakpoint" },
-  { "clear_breakpoints", "Clear all breakpoints" },
   { "watch", "Watch expression" },
   { "hover", "Hover / inspect" },
   { "eval", "Eval in REPL" },
@@ -22,18 +19,36 @@ local key_info = {
   { "help", "Show this help" },
 }
 
+local global_info = {
+  { "toggle", "Toggle debug mode" },
+  { "breakpoint", "Toggle breakpoint" },
+  { "cond_breakpoint", "Conditional breakpoint" },
+  { "clear_breakpoints", "Clear all breakpoints" },
+}
+
 local function build_content()
-  local lines = { " tiny-debugger keybindings", "" }
+  local lines = { " tiny-debugger", "" }
   local width = #lines[1]
-  local keys = config.opts.keys
-  for _, pair in ipairs(key_info) do
-    local key = keys[pair[1]]
-    if key then
-      local line = string.format("  %s  %s", key, pair[2])
-      lines[#lines + 1] = line
-      if #line > width then width = #line end
-    end
+
+  local function add(key, label)
+    local line = string.format("  %-12s %s", key, label)
+    lines[#lines + 1] = line
+    if #line > width then width = #line end
   end
+
+  lines[#lines + 1] = " Debug mode:"
+  for _, pair in ipairs(modal_info) do
+    local key = config.opts.keys[pair[1]]
+    if key then add(key, pair[2]) end
+  end
+
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = " Always available:"
+  for _, pair in ipairs(global_info) do
+    local key = config.opts.global_keys[pair[1]]
+    if key then add(key, pair[2]) end
+  end
+
   lines[#lines + 1] = ""
   return lines, width + 2
 end
