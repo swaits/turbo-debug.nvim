@@ -7,8 +7,15 @@ local active = false
 local active_win = nil
 local saved_winbar = nil
 
--- floating control-bar window (independent of lualine)
-local bar_win, bar_buf = nil, nil
+-- two floating chrome bars (both independent of lualine):
+--   sbar = status bar pinned at the TOP of the editor.
+--     Row 0: turbo-debug · {dap status} · DEBUG · STATE
+--     Row 1: ─── separator
+--   cbar = control bar pinned just above the statusline.
+--     Row 0: ─── separator
+--     Row 1: {controls}                                ❓ help
+local sbar_win, sbar_buf = nil, nil
+local cbar_win, cbar_buf = nil, nil
 
 -- installed[buf][name] = { key = lhs, prev_n = <prev n-mode map>, prev_v = <prev v-mode map> }
 local installed = {}
@@ -91,13 +98,14 @@ local function build_default_layouts()
       },
     },
     {
-      -- 8 rows — the control bar below takes 4 rows (sep + state + controls
-      -- + sep). 8 + 4 = 12, matching the dapui default tray size.
+      -- Console only; REPL removed because it duplicates Console for most
+      -- workflows and the horizontal space is better spent on program
+      -- output. Users who want a REPL can hit `E` in debug mode to open
+      -- it as a floating widget.
       position = "bottom",
-      size = 8,
+      size = 10,
       elements = {
-        { id = "repl",    size = 0.50 },
-        { id = "console", size = 0.50 },
+        { id = "console", size = 1.0 },
       },
     },
   }
@@ -114,6 +122,7 @@ local function define_highlights()
   hl(0, "TurboDebugBarSeparator",   { default = true, link = "FloatBorder" })
   hl(0, "TurboDebugBarCtrl",        { default = true, link = "StatusLine" })
   hl(0, "TurboDebugBarStatus",      { default = true, link = "Comment" })
+  hl(0, "TurboDebugBarBrand",       { default = true, link = "Title" })
   hl(0, "TurboDebugBarReady",       { default = true, link = "DiagnosticHint" })
   hl(0, "TurboDebugBarRunning",     { default = true, link = "DiagnosticInfo" })
   hl(0, "TurboDebugBarPaused",      { default = true, link = "DiagnosticError" })
@@ -163,20 +172,18 @@ local function setup_active_win_highlights()
   })
 end
 
--- ─── control bar (buffer-rendered, not winbar — survives floating windows) ──
-
--- Layout: a 2-row floating window pinned above the statusline.
---   Row 0: a full-width ─ separator line (distinguishes bar from REPL/Console).
---   Row 1: state chip + clickable control buttons + dap status + cursor pos.
--- Content is written to the buffer directly (winbar doesn't render reliably
--- in minimal-style floats). Highlights via extmarks. Clicks via a buffer-local
--- <LeftMouse> keymap that inspects cursor column and dispatches.
+-- ─── chrome bars (top = status, bottom = controls) ─────────────────────────
+--
+-- Both bars are floating windows with buffer-rendered content (winbar
+-- doesn't render reliably in minimal-style floats). Highlights via
+-- extmarks; mouse click dispatch via buffer-local <LeftMouse> keymap +
+-- per-zone display-column lookup.
 
 local bar_ns = vim.api.nvim_create_namespace("turbo-debug.bar")
 
--- `click_zones` is populated by render_bar: each entry is { col_start, col_end, fn }.
--- On <LeftMouse> in the bar, we look up the cursor column and fire the matching fn.
-local click_zones = {}
+-- click zones, one table per bar. Each entry: { line_1based, dcol_start, dcol_end, fn }
+local sbar_zones = {}
+local cbar_zones = {}
 
 local function dap_state()
   local ok, dap = pcall(require, "dap")
@@ -215,55 +222,87 @@ local function build_control_text(icon, key, tail)
   return table.concat(parts), key_col, key_end_col
 end
 
--- 4-row bar layout:
---   row 0 (line 1): ─ top separator
---   row 1 (line 2): state chip + dap.status()       ❓ help
---   row 2 (line 3): controls (centered)
---   row 3 (line 4): ─ bottom separator
--- Help is on its own anchored right-of-row-1 so it can NEVER be pushed
--- off by long status text or wide control labels.
-local function render_bar()
-  if not (bar_buf and vim.api.nvim_buf_is_valid(bar_buf)) then return end
-  if not (bar_win and vim.api.nvim_win_is_valid(bar_win)) then return end
+local function render_sbar()
+  if not (sbar_buf and vim.api.nvim_buf_is_valid(sbar_buf)) then return end
+  if not (sbar_win and vim.api.nvim_win_is_valid(sbar_win)) then return end
 
-  local width = vim.api.nvim_win_get_width(bar_win)
+  local width = vim.api.nvim_win_get_width(sbar_win)
   if width < 1 then width = vim.o.columns end
   local sep = string.rep(ICON.hline, width)
 
   local state, state_hl = dap_state()
 
-  -- ─── ROW 1: state info + help ───────────────────────────
-  local chip_text = " " .. ICON.bug .. " DEBUG " .. ICON.divider .. " " .. state .. " "
+  -- layout: [brand]   [status msg]   [state chip]
+  local brand_text = " turbo-debug "
   local status_ok, status_msg = pcall(function() return require("dap").status() end)
   if not status_ok then status_msg = "" end
-  local status_text = status_msg ~= "" and ("  " .. status_msg) or ""
 
-  local help_text = ICON.help .. " help "
+  local state_chip = " DEBUG " .. ICON.divider .. " " .. state .. " "
 
-  -- fit-check: if status is too long, truncate it so help stays anchored
-  local chip_dw = vim.fn.strdisplaywidth(chip_text)
-  local help_dw = vim.fn.strdisplaywidth(help_text)
-  local status_dw = vim.fn.strdisplaywidth(status_text)
-  local needed = chip_dw + status_dw + help_dw + 2  -- at least 2 cells of spacer
-  if needed > width and status_dw > 0 then
-    local max_status = width - chip_dw - help_dw - 5
-    if max_status > 5 then
-      status_text = "  " .. status_msg:sub(1, max_status - 3) .. ICON.ellipsis
-      status_dw = vim.fn.strdisplaywidth(status_text)
-    else
-      status_text = ""
-      status_dw = 0
-    end
+  local brand_dw = vim.fn.strdisplaywidth(brand_text)
+  local chip_dw = vim.fn.strdisplaywidth(state_chip)
+
+  -- fit status msg if too long
+  local status_dw = vim.fn.strdisplaywidth(status_msg)
+  local available = width - brand_dw - chip_dw - 4
+  if status_dw > available and available > 5 then
+    status_msg = status_msg:sub(1, available - 1) .. ICON.ellipsis
+    status_dw = vim.fn.strdisplaywidth(status_msg)
+  elseif available <= 5 then
+    status_msg = ""
+    status_dw = 0
   end
 
-  local left_state = chip_text .. status_text
-  local left_state_dw = chip_dw + status_dw
-  local state_pad = width - left_state_dw - help_dw
-  if state_pad < 1 then state_pad = 1 end
-  local state_line = left_state .. string.rep(" ", state_pad) .. help_text
+  local remain = width - brand_dw - status_dw - chip_dw
+  if remain < 2 then remain = 2 end
+  -- split evenly on either side of the status msg
+  local pad_left = math.floor(remain / 2)
+  local pad_right = remain - pad_left
+  local top_line = brand_text .. string.rep(" ", pad_left) .. status_msg .. string.rep(" ", pad_right) .. state_chip
 
-  -- ─── ROW 2: controls (centered) ─────────────────────────
-  -- Modal variants so the text reflects what the key will ACTUALLY do:
+  vim.bo[sbar_buf].modifiable = true
+  vim.api.nvim_buf_set_lines(sbar_buf, 0, -1, false, { top_line, sep })
+  vim.bo[sbar_buf].modifiable = false
+
+  vim.api.nvim_buf_clear_namespace(sbar_buf, bar_ns, 0, -1)
+  -- brand
+  pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 0, 0, {
+    end_row = 0, end_col = #brand_text, hl_group = "TurboDebugBarBrand",
+  })
+  -- status (middle)
+  if status_dw > 0 then
+    local status_byte_start = #brand_text + pad_left
+    pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 0, status_byte_start, {
+      end_row = 0, end_col = status_byte_start + #status_msg, hl_group = "TurboDebugBarStatus",
+    })
+  end
+  -- state chip (right)
+  local chip_byte_start = #top_line - #state_chip
+  pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 0, chip_byte_start, {
+    end_row = 0, end_col = #top_line, hl_group = state_hl,
+  })
+  -- separator
+  pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 1, 0, {
+    end_row = 1, end_col = #sep, hl_group = "TurboDebugBarSeparator",
+  })
+
+  sbar_zones = {}
+end
+
+local function render_cbar()
+  if not (cbar_buf and vim.api.nvim_buf_is_valid(cbar_buf)) then return end
+  if not (cbar_win and vim.api.nvim_win_is_valid(cbar_win)) then return end
+
+  local width = vim.api.nvim_win_get_width(cbar_win)
+  if width < 1 then width = vim.o.columns end
+  local sep = string.rep(ICON.hline, width)
+
+  local state, _ = dap_state()
+  local help_text = ICON.help .. " help "
+  local help_dw = vim.fn.strdisplaywidth(help_text)
+
+  -- Modal control labels. State-dependent text so the label shows what
+  -- the key will ACTUALLY do right now:
   --   no session:  (c) start     (q)uit
   --   active:      (c)ontinue    (q) terminate
   local has_session = state ~= "READY"
@@ -299,86 +338,72 @@ local function render_bar()
   end
   local controls_text = table.concat(ctrl_parts)
   local controls_dw = vim.fn.strdisplaywidth(controls_text)
-  local ctrl_pad_left = math.floor((width - controls_dw) / 2)
-  if ctrl_pad_left < 0 then ctrl_pad_left = 0 end
-  local ctrl_pad_right = width - controls_dw - ctrl_pad_left
-  if ctrl_pad_right < 0 then ctrl_pad_right = 0 end
-  local controls_line = string.rep(" ", ctrl_pad_left) .. controls_text .. string.rep(" ", ctrl_pad_right)
 
-  -- ─── commit buffer + extmarks ──────────────────────────
-  vim.bo[bar_buf].modifiable = true
-  vim.api.nvim_buf_set_lines(bar_buf, 0, -1, false, { sep, state_line, controls_line, sep })
-  vim.bo[bar_buf].modifiable = false
+  -- controls centered between left edge and help (right anchor)
+  local ctrl_zone_width = width - help_dw
+  local ctrl_pad_left = math.floor((ctrl_zone_width - controls_dw) / 2)
+  if ctrl_pad_left < 1 then ctrl_pad_left = 1 end
+  local ctrl_pad_right = ctrl_zone_width - controls_dw - ctrl_pad_left
+  if ctrl_pad_right < 1 then ctrl_pad_right = 1 end
+  local bottom_line = string.rep(" ", ctrl_pad_left) .. controls_text .. string.rep(" ", ctrl_pad_right) .. help_text
 
-  vim.api.nvim_buf_clear_namespace(bar_buf, bar_ns, 0, -1)
+  vim.bo[cbar_buf].modifiable = true
+  vim.api.nvim_buf_set_lines(cbar_buf, 0, -1, false, { sep, bottom_line })
+  vim.bo[cbar_buf].modifiable = false
 
-  -- top + bottom separator highlights
-  pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 0, 0, {
+  vim.api.nvim_buf_clear_namespace(cbar_buf, bar_ns, 0, -1)
+  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 0, 0, {
     end_row = 0, end_col = #sep, hl_group = "TurboDebugBarSeparator",
   })
-  pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 3, 0, {
-    end_row = 3, end_col = #sep, hl_group = "TurboDebugBarSeparator",
-  })
 
-  -- row 1: state chip color + status + help
-  pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, 0, {
-    end_row = 1, end_col = #chip_text, hl_group = state_hl,
-  })
-  if #status_text > 0 then
-    pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, #chip_text, {
-      end_row = 1, end_col = #chip_text + #status_text, hl_group = "TurboDebugBarStatus",
-    })
-  end
-  local help_byte_start = #state_line - #help_text
-  pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, help_byte_start, {
-    end_row = 1, end_col = #state_line, hl_group = "TurboDebugBarCtrl",
-  })
-
-  -- row 2: controls (offset by ctrl_pad_left bytes, which is all ASCII spaces)
+  -- control labels
   local ctrl_byte_offset = ctrl_pad_left  -- spaces are 1 byte each
-  click_zones = {}
   for _, span in ipairs(ctrl_spans) do
-    pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 2, ctrl_byte_offset + span[1], {
-      end_row = 2, end_col = ctrl_byte_offset + span[2], hl_group = span[3],
+    pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, ctrl_byte_offset + span[1], {
+      end_row = 1, end_col = ctrl_byte_offset + span[2], hl_group = span[3],
     })
   end
   for _, span in ipairs(ctrl_key_spans) do
-    pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 2, ctrl_byte_offset + span[1], {
-      end_row = 2, end_col = ctrl_byte_offset + span[2], hl_group = "TurboDebugBarKey",
+    pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, ctrl_byte_offset + span[1], {
+      end_row = 1, end_col = ctrl_byte_offset + span[2], hl_group = "TurboDebugBarKey",
     })
   end
 
-  -- click zones — stored as { line_number_1_based, dcol_start, dcol_end, fn }
-  -- help click lives on row 1 (line 2)
-  local help_dcol_start = vim.fn.strdisplaywidth(state_line:sub(1, help_byte_start))
-  local help_dcol_end   = vim.fn.strdisplaywidth(state_line)
-  click_zones[#click_zones + 1] = { 2, help_dcol_start, help_dcol_end,
-                                     function() require("turbo-debug.help").open() end }
-  -- control clicks live on row 2 (line 3)
+  -- help (right-anchored)
+  local help_byte_start = #bottom_line - #help_text
+  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, help_byte_start, {
+    end_row = 1, end_col = #bottom_line, hl_group = "TurboDebugBarCtrl",
+  })
+
+  cbar_zones = {}
   for _, z in ipairs(ctrl_zones_bytes) do
     local byte_start = ctrl_byte_offset + z[1]
     local byte_end = ctrl_byte_offset + z[2]
-    local dcol_start = vim.fn.strdisplaywidth(controls_line:sub(1, byte_start))
-    local dcol_end   = vim.fn.strdisplaywidth(controls_line:sub(1, byte_end))
-    click_zones[#click_zones + 1] = { 3, dcol_start, dcol_end, z[3] }
+    local dcol_start = vim.fn.strdisplaywidth(bottom_line:sub(1, byte_start))
+    local dcol_end   = vim.fn.strdisplaywidth(bottom_line:sub(1, byte_end))
+    cbar_zones[#cbar_zones + 1] = { 2, dcol_start, dcol_end, z[3] }
   end
+  -- help click zone
+  local help_dcol_start = vim.fn.strdisplaywidth(bottom_line:sub(1, help_byte_start))
+  local help_dcol_end   = vim.fn.strdisplaywidth(bottom_line)
+  cbar_zones[#cbar_zones + 1] = { 2, help_dcol_start, help_dcol_end,
+                                   function() require("turbo-debug.help").open() end }
 end
 
-local function bar_position()
-  -- 4 rows: ─ top sep / state+help / controls / ─ bottom sep
-  local row
-  if vim.o.laststatus > 0 then
-    row = vim.o.lines - vim.o.cmdheight - 5  -- 4 (bar) + 1 (statusline)
-  else
-    row = vim.o.lines - vim.o.cmdheight - 4  -- 4 (bar)
-  end
-  if row < 0 then row = 0 end
+local function render_bars()
+  render_sbar()
+  render_cbar()
+end
+
+local function sbar_position()
+  -- 2 rows at the top of the editor, row 0 (below any tabline if present).
+  local top_row = vim.o.showtabline >= 2 and 1 or 0
   return {
     relative  = "editor",
-    row       = row,
+    row       = top_row,
     col       = 0,
     width     = vim.o.columns,
-    height    = 4,
+    height    = 2,
     style     = "minimal",
     border    = "none",
     focusable = false,
@@ -387,75 +412,129 @@ local function bar_position()
   }
 end
 
-local function handle_bar_click()
+local function cbar_position()
+  -- 2 rows just above the statusline.
+  local row
+  if vim.o.laststatus > 0 then
+    row = vim.o.lines - vim.o.cmdheight - 3  -- 2 (bar) + 1 (statusline)
+  else
+    row = vim.o.lines - vim.o.cmdheight - 2  -- 2 (bar)
+  end
+  if row < 0 then row = 0 end
+  return {
+    relative  = "editor",
+    row       = row,
+    col       = 0,
+    width     = vim.o.columns,
+    height    = 2,
+    style     = "minimal",
+    border    = "none",
+    focusable = false,
+    noautocmd = true,
+    zindex    = 50,
+  }
+end
+
+local function handle_sbar_click()
   local pos = vim.fn.getmousepos()
-  if not pos or pos.winid ~= bar_win then return end
-  local col = pos.wincol - 1
-  for _, zone in ipairs(click_zones) do
-    if zone[1] == pos.line and col >= zone[2] and col < zone[3] then
+  if not pos or pos.winid ~= sbar_win then return end
+  for _, zone in ipairs(sbar_zones) do
+    if zone[1] == pos.line and pos.wincol - 1 >= zone[2] and pos.wincol - 1 < zone[3] then
       zone[4]()
       return
     end
   end
 end
 
-local function open_bar()
-  if bar_win and vim.api.nvim_win_is_valid(bar_win) then
-    render_bar()
-    return
+local function handle_cbar_click()
+  local pos = vim.fn.getmousepos()
+  if not pos or pos.winid ~= cbar_win then return end
+  for _, zone in ipairs(cbar_zones) do
+    if zone[1] == pos.line and pos.wincol - 1 >= zone[2] and pos.wincol - 1 < zone[3] then
+      zone[4]()
+      return
+    end
   end
-  bar_buf = vim.api.nvim_create_buf(false, true)
-  vim.bo[bar_buf].bufhidden = "wipe"
-  vim.bo[bar_buf].buftype = "nofile"
-  vim.bo[bar_buf].swapfile = false
-  vim.bo[bar_buf].buflisted = false
-  vim.bo[bar_buf].filetype = "TurboDebugBar"
-  bar_win = vim.api.nvim_open_win(bar_buf, false, bar_position())
-  vim.wo[bar_win].winhighlight = "Normal:TurboDebugBar,EndOfBuffer:TurboDebugBar"
-  vim.wo[bar_win].winfixheight = true
-  vim.wo[bar_win].list = false
-  vim.wo[bar_win].cursorline = false
-  vim.wo[bar_win].number = false
-  vim.wo[bar_win].relativenumber = false
-  vim.wo[bar_win].signcolumn = "no"
-  vim.wo[bar_win].statuscolumn = ""
-  vim.wo[bar_win].wrap = false
+end
 
-  -- click dispatch
-  vim.keymap.set("n", "<LeftMouse>", handle_bar_click, { buffer = bar_buf, silent = true, nowait = true })
-  vim.keymap.set("n", "<LeftRelease>", "<Nop>", { buffer = bar_buf, silent = true, nowait = true })
+local function setup_bar_buf(buf)
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].buflisted = false
+  vim.bo[buf].filetype = "TurboDebugBar"
+end
 
-  -- Safety net: if the user somehow lands in the bar buffer (mouse drag into
-  -- it, or some focus accident), bounce them back out immediately. Stops
-  -- them from hitting E21 "Cannot make changes, 'modifiable' is off" when
-  -- they try to type in a non-modifiable buffer.
+local function setup_bar_win(win)
+  vim.wo[win].winhighlight = "Normal:TurboDebugBar,EndOfBuffer:TurboDebugBar"
+  vim.wo[win].winfixheight = true
+  vim.wo[win].list = false
+  vim.wo[win].cursorline = false
+  vim.wo[win].number = false
+  vim.wo[win].relativenumber = false
+  vim.wo[win].signcolumn = "no"
+  vim.wo[win].statuscolumn = ""
+  vim.wo[win].wrap = false
+end
+
+local function bounce_out(buf)
+  -- if focus lands in a bar buffer (e.g. mouse drag), kick it back out
+  -- so the user can't accidentally type into a non-modifiable buffer.
   vim.api.nvim_create_autocmd("BufEnter", {
-    buffer = bar_buf,
+    buffer = buf,
     callback = function()
       vim.schedule(function()
-        if vim.api.nvim_get_current_buf() == bar_buf then
+        if vim.api.nvim_get_current_buf() == buf then
           pcall(vim.cmd, "wincmd p")
         end
       end)
     end,
   })
-
-  render_bar()
 end
 
-local function close_bar()
-  if bar_win and vim.api.nvim_win_is_valid(bar_win) then
-    pcall(vim.api.nvim_win_close, bar_win, true)
+local function open_bars()
+  -- status bar (top)
+  if not (sbar_win and vim.api.nvim_win_is_valid(sbar_win)) then
+    sbar_buf = vim.api.nvim_create_buf(false, true)
+    setup_bar_buf(sbar_buf)
+    sbar_win = vim.api.nvim_open_win(sbar_buf, false, sbar_position())
+    setup_bar_win(sbar_win)
+    vim.keymap.set("n", "<LeftMouse>", handle_sbar_click, { buffer = sbar_buf, silent = true, nowait = true })
+    vim.keymap.set("n", "<LeftRelease>", "<Nop>", { buffer = sbar_buf, silent = true, nowait = true })
+    bounce_out(sbar_buf)
   end
-  bar_win, bar_buf = nil, nil
-  click_zones = {}
+  -- control bar (bottom)
+  if not (cbar_win and vim.api.nvim_win_is_valid(cbar_win)) then
+    cbar_buf = vim.api.nvim_create_buf(false, true)
+    setup_bar_buf(cbar_buf)
+    cbar_win = vim.api.nvim_open_win(cbar_buf, false, cbar_position())
+    setup_bar_win(cbar_win)
+    vim.keymap.set("n", "<LeftMouse>", handle_cbar_click, { buffer = cbar_buf, silent = true, nowait = true })
+    vim.keymap.set("n", "<LeftRelease>", "<Nop>", { buffer = cbar_buf, silent = true, nowait = true })
+    bounce_out(cbar_buf)
+  end
+  render_bars()
 end
 
-local function reposition_bar()
-  if bar_win and vim.api.nvim_win_is_valid(bar_win) then
-    pcall(vim.api.nvim_win_set_config, bar_win, bar_position())
-    render_bar()
+local function close_bars()
+  if sbar_win and vim.api.nvim_win_is_valid(sbar_win) then
+    pcall(vim.api.nvim_win_close, sbar_win, true)
   end
+  if cbar_win and vim.api.nvim_win_is_valid(cbar_win) then
+    pcall(vim.api.nvim_win_close, cbar_win, true)
+  end
+  sbar_win, sbar_buf, cbar_win, cbar_buf = nil, nil, nil, nil
+  sbar_zones, cbar_zones = {}, {}
+end
+
+local function reposition_bars()
+  if sbar_win and vim.api.nvim_win_is_valid(sbar_win) then
+    pcall(vim.api.nvim_win_set_config, sbar_win, sbar_position())
+  end
+  if cbar_win and vim.api.nvim_win_is_valid(cbar_win) then
+    pcall(vim.api.nvim_win_set_config, cbar_win, cbar_position())
+  end
+  render_bars()
 end
 
 -- ─── dap-ui setup ────────────────────────────────────────────────────────────
@@ -569,12 +648,12 @@ local function ensure_dapui()
 
   -- re-render the control bar on any dap state change so the READY/RUNNING/
   -- PAUSED chip and dap.status() text stay live.
-  local function refresh_bar() vim.schedule(render_bar) end
-  dap.listeners.after.event_initialized["turbo-debug-bar"]  = refresh_bar
-  dap.listeners.after.event_stopped["turbo-debug-bar"]      = refresh_bar
-  dap.listeners.after.event_continued["turbo-debug-bar"]    = refresh_bar
-  dap.listeners.after.event_terminated["turbo-debug-bar"]   = refresh_bar
-  dap.listeners.after.event_exited["turbo-debug-bar"]       = refresh_bar
+  local function refresh_bars() vim.schedule(render_bars) end
+  dap.listeners.after.event_initialized["turbo-debug-bar"]  = refresh_bars
+  dap.listeners.after.event_stopped["turbo-debug-bar"]      = refresh_bars
+  dap.listeners.after.event_continued["turbo-debug-bar"]    = refresh_bars
+  dap.listeners.after.event_terminated["turbo-debug-bar"]   = refresh_bars
+  dap.listeners.after.event_exited["turbo-debug-bar"]       = refresh_bars
 
   dap.listeners.after.event_stopped["turbo-debug-ip"] = function(session, body)
     vim.defer_fn(function()
@@ -852,7 +931,10 @@ end
 local function set_debug_chrome()
   active_win = vim.api.nvim_get_current_win()
   saved_winbar = vim.wo[active_win].winbar
-  vim.wo[active_win].winbar = "%#TurboDebugWinbar# " .. ICON.bug .. " DEBUG %* " .. ICON.divider .. " %f"
+  -- Source file's winbar is just the filename now — the "DEBUG · STATE"
+  -- chip lives in the top status bar (sbar). Keeps the source context
+  -- minimal and leaves more room for filename paths.
+  vim.wo[active_win].winbar = " %f"
 end
 
 local function clear_debug_chrome()
@@ -880,7 +962,7 @@ function M.enter()
   })
   vim.api.nvim_create_autocmd("VimResized", {
     group = group,
-    callback = reposition_bar,
+    callback = reposition_bars,
   })
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_loaded(buf) then M._install_for_buf(buf) end
@@ -889,7 +971,7 @@ function M.enter()
   set_debug_chrome()
   ensure_dapui()
   require("dapui").open()
-  open_bar()
+  open_bars()
 
   -- second install pass after dapui has created its buffers
   vim.schedule(function()
@@ -897,7 +979,7 @@ function M.enter()
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
       if vim.api.nvim_buf_is_loaded(buf) then M._install_for_buf(buf) end
     end
-    reposition_bar()
+    reposition_bars()
   end)
 
   ensure_vt()
@@ -915,7 +997,7 @@ function M.exit()
   pcall(vim.api.nvim_del_augroup_by_name, "TurboDebugModalKeys")
   clear_all_modal_keys()
   clear_debug_chrome()
-  close_bar()
+  close_bars()
   help.close()
 
   if dapui_initialized then require("dapui").close() end
