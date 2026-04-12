@@ -21,34 +21,39 @@ local vt_initialized = false
 -- file stays ASCII through any tool pipeline that strips PUA codepoints.
 
 local ICON = {
-  -- control-bar buttons (colorful emoji for instant recognition)
-  play        = "\xe2\x96\xb6\xef\xb8\x8f",     -- ▶️ (U+25B6 + VS16)
-  step_over   = "\xe2\x8f\xad\xef\xb8\x8f",     -- ⏭️ next track (U+23ED + VS16)
-  step_into   = "\xe2\xac\x87\xef\xb8\x8f",     -- ⬇️ downwards arrow (U+2B07 + VS16)
-  step_out    = "\xe2\xac\x86\xef\xb8\x8f",     -- ⬆️ upwards arrow (U+2B06 + VS16)
-  restart     = "\xf0\x9f\x94\x84",             -- 🔄 counterclockwise arrows (U+1F504)
-  stop        = "\xf0\x9f\x9b\x91",             -- 🛑 octagonal sign (U+1F6D1)
-  close       = "\xe2\x9d\x8c",                 -- ❌ cross mark (U+274C)
+  -- Control-bar buttons: Nerd Font Codicons. Monochrome, but render
+  -- *consistently* across the whole bar — the VS16-dependent emoji family
+  -- (▶️ ⬇️ ⬆️) falls back to text-style in many terminals while
+  -- supplementary-plane emoji (🔴 🐛) render as colored glyphs, producing
+  -- the "some icons are blocks, some are characters" inconsistency. The
+  -- Codicon family all ships in the same Nerd Font glyph range.
+  play       = "\xee\xab\x98",                  --  U+EAD8 debug-start
+  step_over  = "\xee\xab\x96",                  --  U+EAD6 debug-step-over
+  step_into  = "\xee\xab\x95",                  --  U+EAD5 debug-step-into
+  step_out   = "\xee\xab\x94",                  --  U+EAD4 debug-step-out
+  restart    = "\xee\xad\x84",                  --  U+EB44 debug-restart
+  stop       = "\xee\xab\x97",                  --  U+EAD7 debug-stop
 
-  -- pane-title emoji
-  scopes      = "\xf0\x9f\x94\x8e",             -- 🔎 magnifier right (U+1F50E)
+  -- pane-title emoji (supplementary plane — reliably colorful)
+  scopes      = "\xf0\x9f\x94\x8e",             -- 🔎 magnifier (U+1F50E)
   watches     = "\xf0\x9f\x91\x81\xef\xb8\x8f", -- 👁️ eye (U+1F441 + VS16)
   stacks      = "\xf0\x9f\x93\x9a",             -- 📚 books (U+1F4DA)
-  breakpoints = "\xf0\x9f\x94\xb4",             -- 🔴 red circle (U+1F534) — matches BP sign
+  breakpoints = "\xf0\x9f\x94\xb4",             -- 🔴 red circle (U+1F534)
   terminal    = "\xf0\x9f\x92\xbb",             -- 💻 laptop (U+1F4BB)
   repl        = "\xf0\x9f\x92\xac",             -- 💬 speech balloon (U+1F4AC)
 
-  -- debug badge
+  -- brand / state emoji
   bug         = "\xf0\x9f\x90\x9b",             -- 🐛 bug (U+1F41B)
+  help        = "\xe2\x9d\x93",                 -- ❓ (U+2753) black question mark
 
   -- IP arrows
-  ip_left     = "\xf0\x9f\x91\x88",             -- 👈 backhand index pointing left (U+1F448)
+  ip_left     = "\xf0\x9f\x91\x88",             -- 👈 backhand pointing left (U+1F448)
 
   -- misc
   divider     = "\xc2\xb7",                     -- · middle dot
   ellipsis    = "\xe2\x80\xa6",                 -- … horizontal ellipsis
   wrap_mark   = "\xe2\x86\xb3",                 -- ↳ downward arrow w/ tip right
-  hline       = "\xe2\x94\x80",                 -- ─ box drawings light horizontal
+  hline       = "\xe2\x94\x80",                 -- ─ light horizontal
 }
 
 -- ─── layout ──────────────────────────────────────────────────────────────────
@@ -59,10 +64,16 @@ local function build_default_layouts()
     {
       position = pos,
       size = 40,
+      -- Order is deliberate:
+      --   1. Call Stack — answers "where am I?" first when paused
+      --   2. Scopes     — "what's the state here?" (updates when you click a
+      --                    frame above, so adjacency is ergonomic)
+      --   3. Watches    — user-curated expressions, less frequently consulted
+      --   4. Breakpoints — maintenance view, accessed rarely during a pause
       elements = {
+        { id = "stacks",      size = 0.25 },
         { id = "scopes",      size = 0.40 },
         { id = "watches",     size = 0.20 },
-        { id = "stacks",      size = 0.25 },
         { id = "breakpoints", size = 0.15 },
       },
     },
@@ -88,11 +99,31 @@ local function define_highlights()
   hl(0, "TurboDebugBar",            { default = true, link = "StatusLine" })
   hl(0, "TurboDebugBarSeparator",   { default = true, link = "FloatBorder" })
   hl(0, "TurboDebugBarCtrl",        { default = true, link = "StatusLine" })
-  hl(0, "TurboDebugBarKey",         { default = true, link = "Special" })
   hl(0, "TurboDebugBarStatus",      { default = true, link = "Comment" })
   hl(0, "TurboDebugBarReady",       { default = true, link = "DiagnosticHint" })
   hl(0, "TurboDebugBarRunning",     { default = true, link = "DiagnosticInfo" })
   hl(0, "TurboDebugBarPaused",      { default = true, link = "DiagnosticError" })
+
+  -- The key letter inside (c)ontinue etc. gets bold + underline + Special's
+  -- fg. nvim_set_hl can't combine link + bold, so we copy Special's fg
+  -- explicitly and add bold/underline. Re-applied on ColorScheme so theme
+  -- swaps don't blank it out.
+  local function apply_key_hl()
+    local ok, src = pcall(vim.api.nvim_get_hl, 0, { name = "Special", link = false })
+    if not ok or not src or not src.fg then
+      -- fallback: at least make it bold via linking to something bold-ish
+      vim.api.nvim_set_hl(0, "TurboDebugBarKey", { default = true, link = "Special" })
+      return
+    end
+    vim.api.nvim_set_hl(0, "TurboDebugBarKey", {
+      fg = src.fg, bg = src.bg, bold = true, underline = true, default = true,
+    })
+  end
+  apply_key_hl()
+  vim.api.nvim_create_autocmd("ColorScheme", {
+    group = vim.api.nvim_create_augroup("TurboDebugBarKeyHL", { clear = true }),
+    callback = apply_key_hl,
+  })
 end
 
 local function setup_active_win_highlights()
@@ -146,28 +177,28 @@ local function action(name)
   return function() local a = M.actions(); if a[name] then a[name]() end end
 end
 
--- Helper to look up a configured modal key letter. Falls back to the given
--- default so the bar never blanks out if the user remapped something.
 local function keyof(name, fallback)
   local k = config.opts.keys[name]
   if type(k) == "string" then return k end
   return fallback
 end
 
--- Build one control label: returns { segments = { {text, hl, key_span=?}, ... }, fn = action-fn }
--- The label looks like "▶️ (c)ontinue" — the whole text is one click zone;
--- the parenthesized key letter gets a distinct TurboDebugBarKey highlight.
-local function build_label(icon, key, word_head, word_tail, fn)
-  -- layout: "<icon> (<key>)<word_tail>"  e.g. "▶️ (c)ontinue"
-  -- but to match the mnemonic style from help: "(c)ontinue" etc.
-  -- word_head + "(" + key + ")" + word_tail  allows things like  "run to (C) cursor"
-  return {
-    icon = icon,
-    key  = key,
-    head = word_head or "",
-    tail = word_tail or "",
-    fn   = fn,
-  }
+-- Build a label's byte-level representation: returns { text, hl_spans, key_col, key_end_col }
+-- Format: "<icon> (<key>)<tail>"  e.g.  ` (c)ontinue` with byte offsets for highlights.
+local function build_control_text(icon, key, tail)
+  local parts = {}
+  local function add(s) parts[#parts + 1] = s end
+  local function col() return #table.concat(parts) end
+
+  add(icon); add(" ")
+  add("(")
+  local key_col = col()
+  add(key)
+  local key_end_col = col()
+  add(")")
+  add(tail or "")
+
+  return table.concat(parts), key_col, key_end_col
 end
 
 local function render_bar()
@@ -180,86 +211,93 @@ local function render_bar()
 
   local state, state_hl = dap_state()
 
-  -- State chip: e.g. " 🐛 DEBUG · PAUSED "
-  local chip = " " .. ICON.bug .. " DEBUG " .. ICON.divider .. " " .. state .. " "
-
-  -- Control labels. Each: (icon)(space)((key))word. Click zone spans all.
-  local labels = {
-    build_label(ICON.play,      keyof("continue",   "c"), "",        "ontinue",    action("continue")),
-    build_label(ICON.step_over, keyof("step_over",  "s"), "",        "tep",        action("step_over")),
-    build_label(ICON.step_into, keyof("step_into",  "d"), "",        "escend",     action("step_into")),
-    build_label(ICON.step_out,  keyof("step_out",   "r"), "",        "eturn",      action("step_out")),
-    build_label(ICON.restart,   keyof("restart",    "R"), "",        "estart",     action("restart")),
-    build_label(ICON.stop,      keyof("terminate",  "q"), "",        "uit",        action("terminate")),
-    build_label("\xe2\x9d\x93", keyof("help",       "?"), "",        ")help" ~= nil and "help" or "help",
-                function() require("turbo-debug.help").open() end),
-  }
-  -- Fix the last label's construction (the above is awkward because of the
-  -- "(?)help" edge case where key is "?" and the "word" is just "help").
-  labels[#labels] = {
-    icon = "\xe2\x9d\x93",  -- ❓
-    key  = keyof("help", "?"),
-    head = "",
-    tail = "help",
-    fn   = function() require("turbo-debug.help").open() end,
-    no_attach = true,  -- render as "❓ (?) help" with a space after )
-  }
-
-  -- dap.status() on the right
+  -- ─── LEFT ZONE ─── state chip (always shown) + dap.status() (optional)
+  local chip_text = " " .. ICON.bug .. " DEBUG " .. ICON.divider .. " " .. state .. " "
   local status_ok, status_msg = pcall(function() return require("dap").status() end)
   if not status_ok then status_msg = "" end
-  local right = (status_msg ~= "" and (status_msg .. " ") or "")
+  local status_text = (status_msg ~= "" and ("  " .. status_msg) or "")
 
-  -- Build the content line piece by piece, tracking (col, end_col, hl) spans
-  -- for extmarks AND (col, end_col, fn) zones for click dispatch.
-  local pieces = { chip }  -- start with chip text
-  local hl_spans = { { 0, #chip, state_hl } }
-  click_zones = {}
+  -- ─── CENTER ZONE ─── control labels, each clickable
+  local controls = {
+    { icon = ICON.play,      key = keyof("continue",  "c"), tail = "ontinue", fn = action("continue")  },
+    { icon = ICON.step_over, key = keyof("step_over", "s"), tail = "tep",     fn = action("step_over") },
+    { icon = ICON.step_into, key = keyof("step_into", "d"), tail = "escend",  fn = action("step_into") },
+    { icon = ICON.step_out,  key = keyof("step_out",  "r"), tail = "eturn",   fn = action("step_out")  },
+    { icon = ICON.restart,   key = keyof("restart",   "R"), tail = "estart",  fn = action("restart")   },
+    { icon = ICON.stop,      key = keyof("terminate", "q"), tail = "uit",     fn = action("terminate") },
+  }
 
-  local function byte_col() return #table.concat(pieces) end
+  -- ─── RIGHT ZONE ─── help (no "(?)" — the ❓ emoji is self-documenting)
+  local help_icon = ICON.help
+  local help_label_text = help_icon .. " help "
+  local help_fn = function() require("turbo-debug.help").open() end
 
-  for _, lb in ipairs(labels) do
-    -- leading gap between labels
-    local gap = "   "
-    pieces[#pieces + 1] = gap
+  -- compose the center text first so we can measure it
+  local center_parts = {}
+  local center_spans = {}      -- { byte_start, byte_end, hl }
+  local center_key_spans = {}  -- { byte_start, byte_end } for TurboDebugBarKey
+  local center_zones = {}      -- { byte_start, byte_end, fn } pre-display-column
+  local gap = "   "
+  for i, c in ipairs(controls) do
+    local prefix_len = #table.concat(center_parts)
+    if i > 1 then
+      center_parts[#center_parts + 1] = gap
+      prefix_len = prefix_len + #gap
+    end
+    local txt, kcol, kend = build_control_text(c.icon, c.key, c.tail)
+    local label_start = prefix_len
+    local label_end = prefix_len + #txt
+    center_parts[#center_parts + 1] = txt
+    center_spans[#center_spans + 1] = { label_start, label_end, "TurboDebugBarCtrl" }
+    center_key_spans[#center_key_spans + 1] = { label_start + kcol, label_start + kend }
+    center_zones[#center_zones + 1] = { label_start, label_end, c.fn }
+  end
+  local center_text = table.concat(center_parts)
 
-    local label_start = byte_col()
-    -- icon
-    pieces[#pieces + 1] = lb.icon
-    pieces[#pieces + 1] = " "
-    -- head + "(" + key + ")" + tail  (e.g. "run to (C) cursor" → head="run to " tail=" cursor")
-    pieces[#pieces + 1] = lb.head
-    local paren_open_col = byte_col()
-    pieces[#pieces + 1] = "("
-    local key_col = byte_col()
-    pieces[#pieces + 1] = lb.key
-    local key_end_col = byte_col()
-    pieces[#pieces + 1] = ")"
-    local paren_close_col = byte_col()
-    if lb.no_attach then pieces[#pieces + 1] = " " end
-    pieces[#pieces + 1] = lb.tail
-    local label_end = byte_col()
+  -- widths in display columns (not bytes — emoji are multi-byte and multi-cell)
+  local left_dw   = vim.fn.strdisplaywidth(chip_text) + vim.fn.strdisplaywidth(status_text)
+  local center_dw = vim.fn.strdisplaywidth(center_text)
+  local right_dw  = vim.fn.strdisplaywidth(help_label_text)
 
-    -- highlight: the paren+key differently
-    hl_spans[#hl_spans + 1] = { label_start, label_end, "TurboDebugBarCtrl" }
-    hl_spans[#hl_spans + 1] = { key_col, key_end_col, "TurboDebugBarKey" }
+  -- Graceful degradation when the window narrows. Priority (most important last):
+  --   1. dap.status()     — drop first
+  --   2. center controls  — truncate from the right
+  --   3. state chip       — collapse to just "🐛"
+  --   4. help             — NEVER drop
+  local show_status = true
+  local show_controls = true
+  local show_chip = true
 
-    click_zones[#click_zones + 1] = { label_start, label_end, lb.fn }
+  if left_dw + center_dw + right_dw + 4 > width then
+    show_status = false  -- drop status first
+    left_dw = vim.fn.strdisplaywidth(chip_text)
+  end
+  if left_dw + center_dw + right_dw + 4 > width then
+    show_controls = false  -- drop center next
+    center_dw = 0
+  end
+  if left_dw + right_dw + 2 > width then
+    show_chip = false  -- collapse chip to just the bug icon
+    chip_text = " " .. ICON.bug .. " "
+    left_dw = vim.fn.strdisplaywidth(chip_text)
   end
 
-  local line = table.concat(pieces)
+  -- compose: [left][pad1][center][pad2][right]
+  local left_text = chip_text .. (show_status and status_text or "")
+  local right_text = help_label_text
+  local center_to_use = show_controls and center_text or ""
+  local center_dw_used = show_controls and center_dw or 0
 
-  -- right-align the status text
-  local line_dwidth = vim.fn.strdisplaywidth(line)
-  local right_dwidth = vim.fn.strdisplaywidth(right)
-  local pad = width - line_dwidth - right_dwidth
-  if pad < 1 then pad = 1 end
-  local padding = string.rep(" ", pad)
-  local right_byte_start = #line + #padding
-  line = line .. padding .. right
+  local remain = width - left_dw - center_dw_used - right_dw
+  if remain < 0 then remain = 0 end
+  -- split remaining space symmetrically on either side of the center
+  local pad1 = math.floor(remain / 2)
+  local pad2 = remain - pad1
+  local line = left_text .. string.rep(" ", pad1) .. center_to_use .. string.rep(" ", pad2) .. right_text
 
-  -- safety: if content is still wider than window, truncate
+  -- safety truncate
   if vim.fn.strdisplaywidth(line) > width then
+    -- keep right-anchored help visible by truncating from the middle if possible
     line = line:sub(1, width)
   end
 
@@ -277,34 +315,54 @@ local function render_bar()
     end_row = 2, end_col = #sep, hl_group = "TurboDebugBarSeparator",
   })
 
-  -- content-line highlights
-  for _, span in ipairs(hl_spans) do
-    local col_start, col_end = span[1], span[2]
-    if col_end > #line then col_end = #line end
-    if col_start < col_end then
-      pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, col_start, {
-        end_row = 1, end_col = col_end, hl_group = span[3],
-      })
-    end
-  end
-
-  -- right-side status highlight
-  if right ~= "" and right_byte_start < #line then
-    pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, right_byte_start, {
-      end_row = 1, end_col = #line, hl_group = "TurboDebugBarStatus",
+  -- state chip highlight (at the start of the line)
+  local chip_end = #chip_text
+  pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, 0, {
+    end_row = 1, end_col = chip_end, hl_group = state_hl,
+  })
+  if show_status and #status_text > 0 then
+    local s = chip_end
+    local e = chip_end + #status_text
+    pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, s, {
+      end_row = 1, end_col = e, hl_group = "TurboDebugBarStatus",
     })
   end
 
-  -- convert byte-based click zones to display-column-based for mouse lookup
-  for i, z in ipairs(click_zones) do
-    local text_before = line:sub(1, z[1])
-    local text_through = line:sub(1, z[2])
-    click_zones[i] = {
-      vim.fn.strdisplaywidth(text_before),
-      vim.fn.strdisplaywidth(text_through),
-      z[3],
-    }
+  -- center highlights (offset by left_text + pad1 bytes)
+  local center_byte_offset = #left_text + pad1
+  click_zones = {}
+  if show_controls then
+    for _, span in ipairs(center_spans) do
+      pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, center_byte_offset + span[1], {
+        end_row = 1, end_col = center_byte_offset + span[2], hl_group = span[3],
+      })
+    end
+    for _, span in ipairs(center_key_spans) do
+      pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, center_byte_offset + span[1], {
+        end_row = 1, end_col = center_byte_offset + span[2], hl_group = "TurboDebugBarKey",
+      })
+    end
+    for _, zone in ipairs(center_zones) do
+      local byte_start = center_byte_offset + zone[1]
+      local byte_end = center_byte_offset + zone[2]
+      local dcol_start = vim.fn.strdisplaywidth(line:sub(1, byte_start))
+      local dcol_end   = vim.fn.strdisplaywidth(line:sub(1, byte_end))
+      click_zones[#click_zones + 1] = { dcol_start, dcol_end, zone[3] }
+    end
   end
+
+  -- right zone (help) highlight + click
+  local right_byte_start = #line - #right_text
+  pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, right_byte_start, {
+    end_row = 1, end_col = #line, hl_group = "TurboDebugBarCtrl",
+  })
+  -- emphasize the ❓ itself with the key-hint color
+  pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, right_byte_start + 1, {
+    end_row = 1, end_col = right_byte_start + 1 + #ICON.help, hl_group = "TurboDebugBarKey",
+  })
+  local help_dcol_start = vim.fn.strdisplaywidth(line:sub(1, right_byte_start))
+  local help_dcol_end   = vim.fn.strdisplaywidth(line)
+  click_zones[#click_zones + 1] = { help_dcol_start, help_dcol_end, help_fn }
 end
 
 local function bar_position()
