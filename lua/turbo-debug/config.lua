@@ -4,6 +4,11 @@ M.defaults = {
   help_on_enter = true,
   builtin_adapters = true,
   quit_exits_mode = true, -- q terminates AND exits debug mode (false = terminate only)
+  -- When `c` is pressed with no breakpoints set, launch the first adapter
+  -- configuration for the filetype with stopOnEntry so the debugger pauses
+  -- at the program's entry point. Matches the Turbo Pascal "press key to
+  -- start debugging" model. Set false to always run until a breakpoint.
+  stop_on_entry_when_no_breakpoints = true,
 
   -- modal keys (active only during debug mode, single-key)
   keys = {
@@ -31,40 +36,58 @@ M.defaults = {
     clear_breakpoints = "<leader>dD",
   },
 
+  -- sidebar position: "left" (default) or "right"
+  sidebar = "left",
+
+  -- highlight the active dapui pane's border/separator vs. dim inactive panes
+  active_window_highlight = true,
+
   dapui = {
-    icons = { expanded = "▼", collapsed = "▶", current_frame = "➤" },
+    -- Unicode icons via byte escapes so they survive tool round-trips.
+    -- ▾ U+25BE down-triangle (expanded), ▸ U+25B8 right-triangle (collapsed),
+    -- ▶ U+25B6 right-pointing triangle (current frame / play-head)
+    icons = {
+      expanded      = "\xe2\x96\xbe",
+      collapsed     = "\xe2\x96\xb8",
+      current_frame = "\xe2\x96\xb6",
+    },
     controls = {
       enabled = true,
       element = "repl",
+      -- ▶ play, ⏸ pause, ⤓ step-into, ⇒ step-over, ⤒ step-out, ↶ step-back,
+      -- ↻ run-last, ■ terminate, ⊗ disconnect
+      icons = {
+        play       = "\xe2\x96\xb6",
+        pause      = "\xe2\x8f\xb8",
+        step_into  = "\xe2\xa4\x93",
+        step_over  = "\xe2\x87\x92",
+        step_out   = "\xe2\xa4\x92",
+        step_back  = "\xe2\x86\xb6",
+        run_last   = "\xe2\x86\xbb",
+        terminate  = "\xe2\x96\xa0",
+        disconnect = "\xe2\x8a\x97",
+      },
     },
-    floating = { border = "rounded" },
+    floating = { border = "rounded", mappings = { close = { "q", "<Esc>" } } },
     render = { indent = 2, max_type_length = 20 },
-    layouts = {
-      {
-        position = "right",
-        size = 40,
-        elements = {
-          { id = "scopes", size = 0.50 },
-          { id = "watches", size = 0.25 },
-          { id = "stacks", size = 0.25 },
-        },
-      },
-      {
-        position = "bottom",
-        size = 12,
-        elements = {
-          { id = "repl", size = 0.50 },
-          { id = "console", size = 0.50 },
-        },
-      },
-    },
+    -- layouts are built dynamically from `sidebar` in mode.lua; override
+    -- `layouts` here to fully customize.
+    layouts = nil,
   },
 
   virtual_text = {
+    enabled = true,
     commented = true,
+    virt_text_pos = "eol",
+    show_stop_reason = true,
     highlight_changed_variables = true,
+    highlight_new_as_changed = false,
     only_first_definition = false,
     all_frames = false,
+    display_callback = function(variable)
+      if #variable.value > 80 then return " = " .. variable.value:sub(1, 77) .. "…" end
+      return " = " .. variable.value
+    end,
   },
 
   adapters = {},
