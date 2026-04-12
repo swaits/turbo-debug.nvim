@@ -21,40 +21,34 @@ local vt_initialized = false
 -- file stays ASCII through any tool pipeline that strips PUA codepoints.
 
 local ICON = {
-  -- controls (match dapui's own controls-panel defaults)
-  play        = "\xee\xab\x98",  -- U+EAD8 debug-start
-  pause       = "\xee\xab\x99",  -- U+EAD9 debug-pause
-  step_over   = "\xee\xab\x96",  -- U+EAD6 debug-step-over
-  step_into   = "\xee\xab\x95",  -- U+EAD5 debug-step-into
-  step_out    = "\xee\xab\x94",  -- U+EAD4 debug-step-out
-  step_back   = "\xee\xac\xb4",  -- U+EB34 debug-step-back
-  restart     = "\xee\xad\x84",  -- U+EB44 debug-restart
-  stop        = "\xee\xab\x97",  -- U+EAD7 debug-stop
-  disconnect  = "\xee\xab\xb7",  -- U+EAF7 debug-disconnect
-  close       = "\xee\xa9\xb6",  -- U+EA76 close
+  -- control-bar buttons (colorful emoji for instant recognition)
+  play        = "\xe2\x96\xb6\xef\xb8\x8f",     -- ▶️ (U+25B6 + VS16)
+  step_over   = "\xe2\x8f\xad\xef\xb8\x8f",     -- ⏭️ next track (U+23ED + VS16)
+  step_into   = "\xe2\xac\x87\xef\xb8\x8f",     -- ⬇️ downwards arrow (U+2B07 + VS16)
+  step_out    = "\xe2\xac\x86\xef\xb8\x8f",     -- ⬆️ upwards arrow (U+2B06 + VS16)
+  restart     = "\xf0\x9f\x94\x84",             -- 🔄 counterclockwise arrows (U+1F504)
+  stop        = "\xf0\x9f\x9b\x91",             -- 🛑 octagonal sign (U+1F6D1)
+  close       = "\xe2\x9d\x8c",                 -- ❌ cross mark (U+274C)
 
-  -- signs
-  breakpoint  = "\xee\xa9\xb1",  -- U+EA71 debug-breakpoint
-  bp_cond     = "\xee\xaa\x9f",  -- U+EA9F debug-breakpoint-conditional
-  bp_rej      = "\xee\xaa\xbe",  -- U+EABE circle-slash
-  stackframe  = "\xee\xae\x8b",  -- U+EB8B debug-stackframe
-  logpoint    = "\xee\xaf\xa4",  -- U+EBE4 debug-breakpoint-log
+  -- pane-title emoji
+  scopes      = "\xf0\x9f\x94\x8e",             -- 🔎 magnifier right (U+1F50E)
+  watches     = "\xf0\x9f\x91\x81\xef\xb8\x8f", -- 👁️ eye (U+1F441 + VS16)
+  stacks      = "\xf0\x9f\x93\x9a",             -- 📚 books (U+1F4DA)
+  breakpoints = "\xf0\x9f\x94\xb4",             -- 🔴 red circle (U+1F534) — matches BP sign
+  terminal    = "\xf0\x9f\x92\xbb",             -- 💻 laptop (U+1F4BB)
+  repl        = "\xf0\x9f\x92\xac",             -- 💬 speech balloon (U+1F4AC)
 
-  -- pane titles
-  scopes      = "\xee\xaa\x8f",  -- U+EA8F variable-group
-  watches     = "\xee\xa9\xb0",  -- U+EA70 eye
-  stacks      = "\xee\xae\x83",  -- U+EB83 list-tree
-  terminal    = "\xee\xaa\x85",  -- U+EA85 terminal
-  chevron     = "\xee\xaa\xb6",  -- U+EAB6 chevron-right
+  -- debug badge
+  bug         = "\xf0\x9f\x90\x9b",             -- 🐛 bug (U+1F41B)
 
-  -- debug badge (bug-in-circle)
-  debug_alt   = "\xee\xae\x91",  -- U+EB91 debug-alt
+  -- IP arrows
+  ip_left     = "\xf0\x9f\x91\x88",             -- 👈 backhand index pointing left (U+1F448)
 
   -- misc
-  ip_left     = "\xf0\x9f\x91\x88",  -- 👈 backhand index pointing left (U+1F448)
-  divider     = "\xc2\xb7",          -- · middle dot
-  ellipsis    = "\xe2\x80\xa6",      -- … horizontal ellipsis
-  wrap_mark   = "\xe2\x86\xb3",      -- ↳ downward-arrow-with-tip-rightwards
+  divider     = "\xc2\xb7",                     -- · middle dot
+  ellipsis    = "\xe2\x80\xa6",                 -- … horizontal ellipsis
+  wrap_mark   = "\xe2\x86\xb3",                 -- ↳ downward arrow w/ tip right
+  hline       = "\xe2\x94\x80",                 -- ─ box drawings light horizontal
 }
 
 -- ─── layout ──────────────────────────────────────────────────────────────────
@@ -91,6 +85,7 @@ local function define_highlights()
   hl(0, "TurboDebugBorderInactive", { default = true, link = "Comment" })
   hl(0, "TurboDebugWinbar",         { default = true, link = "DiagnosticError" })
   hl(0, "TurboDebugBar",            { default = true, link = "StatusLine" })
+  hl(0, "TurboDebugBarSeparator",   { default = true, link = "WinSeparator" })
   hl(0, "TurboDebugBarCtrl",        { default = true, link = "Function" })
   hl(0, "TurboDebugBarStatus",      { default = true, link = "Comment" })
   hl(0, "TurboDebugBarReady",       { default = true, link = "DiagnosticHint" })
@@ -121,62 +116,119 @@ local function setup_active_win_highlights()
   })
 end
 
--- ─── global control buttons (referenced by bar winbar expression) ───────────
+-- ─── control bar (buffer-rendered, not winbar — survives floating windows) ──
 
-_G.turbo_debug_continue   = function() M.actions().continue() end
-_G.turbo_debug_step_over  = function() require("dap").step_over() end
-_G.turbo_debug_step_into  = function() require("dap").step_into() end
-_G.turbo_debug_step_out   = function() require("dap").step_out() end
-_G.turbo_debug_restart    = function() require("dap").restart() end
-_G.turbo_debug_terminate  = function() M.actions().terminate() end
-_G.turbo_debug_toggle     = function() M.toggle() end
+-- Layout: a 2-row floating window pinned above the statusline.
+--   Row 0: a full-width ─ separator line (distinguishes bar from REPL/Console).
+--   Row 1: state chip + clickable control buttons + dap status + cursor pos.
+-- Content is written to the buffer directly (winbar doesn't render reliably
+-- in minimal-style floats). Highlights via extmarks. Clicks via a buffer-local
+-- <LeftMouse> keymap that inspects cursor column and dispatches.
 
-function _G.turbo_debug_bar()
-  local dap_ok, dap = pcall(require, "dap")
-  local state, state_hl
-  if not dap_ok then
-    state, state_hl = "READY", "TurboDebugBarReady"
-  else
-    local s = dap.session()
-    if not s then
-      state, state_hl = "READY", "TurboDebugBarReady"
-    elseif s.stopped_thread_id then
-      state, state_hl = "PAUSED", "TurboDebugBarPaused"
-    else
-      state, state_hl = "RUNNING", "TurboDebugBarRunning"
-    end
-  end
+local bar_ns = vim.api.nvim_create_namespace("turbo-debug.bar")
 
-  local parts = {
-    "%#" .. state_hl .. "# " .. ICON.debug_alt .. " " .. state .. " %*",
-    "  ",
-    "%#TurboDebugBarCtrl#",
-    "%@v:lua.turbo_debug_continue@  " .. ICON.play       .. "  %X",
-    "%@v:lua.turbo_debug_step_over@  " .. ICON.step_over .. "  %X",
-    "%@v:lua.turbo_debug_step_into@  " .. ICON.step_into .. "  %X",
-    "%@v:lua.turbo_debug_step_out@  "  .. ICON.step_out  .. "  %X",
-    "%@v:lua.turbo_debug_restart@  "   .. ICON.restart   .. "  %X",
-    "%@v:lua.turbo_debug_terminate@  " .. ICON.stop      .. "  %X",
-    "%@v:lua.turbo_debug_toggle@  "    .. ICON.close     .. "  %X",
-    "%*",
-    " %=",
-    "%#TurboDebugBarStatus#%{v:lua.require'dap'.status()}%*",
-    "  %l:%c ",
-  }
-  return table.concat(parts, "")
+-- `click_zones` is populated by render_bar: each entry is { col_start, col_end, fn }.
+-- On <LeftMouse> in the bar, we look up the cursor column and fire the matching fn.
+local click_zones = {}
+
+local function dap_state()
+  local ok, dap = pcall(require, "dap")
+  if not ok then return "READY", "TurboDebugBarReady" end
+  local s = dap.session()
+  if not s then return "READY", "TurboDebugBarReady" end
+  if s.stopped_thread_id then return "PAUSED", "TurboDebugBarPaused" end
+  return "RUNNING", "TurboDebugBarRunning"
 end
 
--- ─── floating control bar ───────────────────────────────────────────────────
+local function action(name)
+  return function() local a = M.actions(); if a[name] then a[name]() end end
+end
+
+local function render_bar()
+  if not (bar_buf and vim.api.nvim_buf_is_valid(bar_buf)) then return end
+  if not (bar_win and vim.api.nvim_win_is_valid(bar_win)) then return end
+
+  local width = vim.api.nvim_win_get_width(bar_win)
+  local sep = string.rep(ICON.hline, width)
+
+  -- build the content row as a list of { text, hl, click_fn? } segments
+  local state, state_hl = dap_state()
+
+  local buttons = {
+    { text = "  " .. ICON.play       .. "  ", fn = action("continue"),  hl = "TurboDebugBarCtrl" },
+    { text = "  " .. ICON.step_over  .. "  ", fn = action("step_over"), hl = "TurboDebugBarCtrl" },
+    { text = "  " .. ICON.step_into  .. "  ", fn = action("step_into"), hl = "TurboDebugBarCtrl" },
+    { text = "  " .. ICON.step_out   .. "  ", fn = action("step_out"),  hl = "TurboDebugBarCtrl" },
+    { text = "  " .. ICON.restart    .. "  ", fn = action("restart"),   hl = "TurboDebugBarCtrl" },
+    { text = "  " .. ICON.stop       .. "  ", fn = action("terminate"), hl = "TurboDebugBarCtrl" },
+    { text = "  " .. ICON.close      .. "  ", fn = function() M.toggle() end, hl = "TurboDebugBarCtrl" },
+  }
+
+  -- state chip: " 🐛 DEBUG · READY "
+  local chip = " " .. ICON.bug .. " DEBUG " .. ICON.divider .. " " .. state .. " "
+
+  -- right-side: dap.status() + " %l:%c " (no %l/%c in buffer — fill with something static)
+  local status_ok, status_msg = pcall(function() return require("dap").status() end)
+  if not status_ok then status_msg = "" end
+  local right = (status_msg ~= "" and (status_msg .. " ") or "")
+
+  -- compose line: [chip][buttons...][right-align fills][right]
+  local left = chip
+  for _, b in ipairs(buttons) do left = left .. b.text end
+  local pad_len = width - vim.fn.strdisplaywidth(left) - vim.fn.strdisplaywidth(right)
+  if pad_len < 1 then pad_len = 1 end
+  local line = left .. string.rep(" ", pad_len) .. right
+  if vim.fn.strdisplaywidth(line) > width then
+    -- crude truncate to avoid wrap
+    line = line:sub(1, width)
+  end
+
+  vim.bo[bar_buf].modifiable = true
+  vim.api.nvim_buf_set_lines(bar_buf, 0, -1, false, { sep, line })
+  vim.bo[bar_buf].modifiable = false
+
+  -- separator line highlight
+  vim.api.nvim_buf_clear_namespace(bar_buf, bar_ns, 0, -1)
+  vim.api.nvim_buf_set_extmark(bar_buf, bar_ns, 0, 0, {
+    end_row = 0, end_col = #sep, hl_group = "TurboDebugBarSeparator",
+  })
+
+  -- state chip highlight
+  vim.api.nvim_buf_set_extmark(bar_buf, bar_ns, 1, 0, {
+    end_row = 1, end_col = #chip, hl_group = state_hl,
+  })
+
+  -- button highlights + click zones (reset first)
+  click_zones = {}
+  local col = #chip
+  for _, b in ipairs(buttons) do
+    vim.api.nvim_buf_set_extmark(bar_buf, bar_ns, 1, col, {
+      end_row = 1, end_col = col + #b.text, hl_group = b.hl,
+    })
+    -- click zones use DISPLAY columns for comparison, computed from byte offset
+    local text_before = line:sub(1, col)
+    local text_after = line:sub(1, col + #b.text)
+    local dcol_start = vim.fn.strdisplaywidth(text_before)
+    local dcol_end = vim.fn.strdisplaywidth(text_after)
+    click_zones[#click_zones + 1] = { dcol_start, dcol_end, b.fn }
+    col = col + #b.text
+  end
+
+  -- right-side status highlight
+  if right ~= "" then
+    local right_byte_start = #line - #right
+    vim.api.nvim_buf_set_extmark(bar_buf, bar_ns, 1, right_byte_start, {
+      end_row = 1, end_col = #line, hl_group = "TurboDebugBarStatus",
+    })
+  end
+end
 
 local function bar_position()
-  -- sit one row above the statusline; statusline is at (lines - cmdheight - 1).
-  -- Our bar goes at (lines - cmdheight - 2). If laststatus == 0 there's no
-  -- statusline, so sit at the bottom (lines - cmdheight - 1).
   local row
   if vim.o.laststatus > 0 then
-    row = vim.o.lines - vim.o.cmdheight - 2
+    row = vim.o.lines - vim.o.cmdheight - 3  -- 2 rows for bar + 1 for statusline
   else
-    row = vim.o.lines - vim.o.cmdheight - 1
+    row = vim.o.lines - vim.o.cmdheight - 2  -- 2 rows for bar
   end
   if row < 0 then row = 0 end
   return {
@@ -184,7 +236,7 @@ local function bar_position()
     row       = row,
     col       = 0,
     width     = vim.o.columns,
-    height    = 1,
+    height    = 2,
     style     = "minimal",
     border    = "none",
     focusable = false,
@@ -193,18 +245,44 @@ local function bar_position()
   }
 end
 
+local function handle_bar_click()
+  -- mouse click dispatch: look up current column, find matching zone
+  local pos = vim.fn.getmousepos()
+  if not pos or pos.winid ~= bar_win then return end
+  if pos.line ~= 2 then return end  -- only row 2 (the controls row)
+  local col = pos.wincol - 1  -- 1-based → 0-based display column
+  for _, zone in ipairs(click_zones) do
+    if col >= zone[1] and col < zone[2] then
+      zone[3]()
+      return
+    end
+  end
+end
+
 local function open_bar()
-  if bar_win and vim.api.nvim_win_is_valid(bar_win) then return end
+  if bar_win and vim.api.nvim_win_is_valid(bar_win) then
+    render_bar()
+    return
+  end
   bar_buf = vim.api.nvim_create_buf(false, true)
   vim.bo[bar_buf].bufhidden = "wipe"
+  vim.bo[bar_buf].filetype = "TurboDebugBar"
   bar_win = vim.api.nvim_open_win(bar_buf, false, bar_position())
-  vim.wo[bar_win].winbar = "%!v:lua.turbo_debug_bar()"
-  vim.wo[bar_win].winhighlight = "Normal:TurboDebugBar,WinBar:TurboDebugBar,WinBarNC:TurboDebugBar"
+  vim.wo[bar_win].winhighlight = "Normal:TurboDebugBar,EndOfBuffer:TurboDebugBar"
   vim.wo[bar_win].winfixheight = true
   vim.wo[bar_win].list = false
+  vim.wo[bar_win].cursorline = false
   vim.wo[bar_win].number = false
   vim.wo[bar_win].relativenumber = false
   vim.wo[bar_win].signcolumn = "no"
+  vim.wo[bar_win].statuscolumn = ""
+  vim.wo[bar_win].wrap = false
+
+  -- click dispatch (both mouse button and drag — drag counts as click on bar_buf)
+  vim.keymap.set("n", "<LeftMouse>", handle_bar_click, { buffer = bar_buf, silent = true, nowait = true })
+  vim.keymap.set("n", "<LeftRelease>", "<Nop>", { buffer = bar_buf, silent = true, nowait = true })
+
+  render_bar()
 end
 
 local function close_bar()
@@ -212,11 +290,13 @@ local function close_bar()
     pcall(vim.api.nvim_win_close, bar_win, true)
   end
   bar_win, bar_buf = nil, nil
+  click_zones = {}
 end
 
 local function reposition_bar()
   if bar_win and vim.api.nvim_win_is_valid(bar_win) then
     pcall(vim.api.nvim_win_set_config, bar_win, bar_position())
+    render_bar()
   end
 end
 
@@ -295,16 +375,38 @@ local function ensure_dapui()
   -- console refresh: trailing-edge throttled so chatty programs don't DOS us
   dap.listeners.after.event_output["turbo-debug-redraw"] = schedule_console_redraw
 
-  -- IP marker: paired arrows. Gutter sign ▶ + EOL vtext ◀ REASON flanking the
-  -- paused line.
+  -- IP marker: paired arrows. Gutter sign 👉 + EOL vtext 👈 REASON flanking
+  -- the paused line. clear_ip() wipes both our own extmarks AND nvim-dap's
+  -- DapStopped gutter signs, so a restart (or a natural session end) doesn't
+  -- leave a stale 👉 behind on the last-paused line.
   local ip_ns = vim.api.nvim_create_namespace("turbo-debug.ip")
   local function clear_ip()
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
       if vim.api.nvim_buf_is_valid(buf) then
         vim.api.nvim_buf_clear_namespace(buf, ip_ns, 0, -1)
+        -- unplace any lingering DapStopped signs (nvim-dap doesn't always
+        -- clear these on restart — it's the exact bug the user hit).
+        local ok, placed = pcall(vim.fn.sign_getplaced, buf, { group = "*" })
+        if ok and placed and placed[1] then
+          for _, s in ipairs(placed[1].signs or {}) do
+            if s.name == "DapStopped" then
+              pcall(vim.fn.sign_unplace, s.group or "", { buffer = buf, id = s.id })
+            end
+          end
+        end
       end
     end
   end
+
+  -- re-render the control bar on any dap state change so the READY/RUNNING/
+  -- PAUSED chip and dap.status() text stay live.
+  local function refresh_bar() vim.schedule(render_bar) end
+  dap.listeners.after.event_initialized["turbo-debug-bar"]  = refresh_bar
+  dap.listeners.after.event_stopped["turbo-debug-bar"]      = refresh_bar
+  dap.listeners.after.event_continued["turbo-debug-bar"]    = refresh_bar
+  dap.listeners.after.event_terminated["turbo-debug-bar"]   = refresh_bar
+  dap.listeners.after.event_exited["turbo-debug-bar"]       = refresh_bar
+
   dap.listeners.after.event_stopped["turbo-debug-ip"] = function(session, body)
     vim.defer_fn(function()
       clear_ip()
@@ -329,14 +431,14 @@ local function ensure_dapui()
   dap.listeners.before.event_terminated["turbo-debug-ip"] = function() clear_ip() end
   dap.listeners.before.event_exited["turbo-debug-ip"]     = function() clear_ip() end
 
-  -- winbar titles on dapui panes (Codicons, byte-escaped)
+  -- winbar titles on dapui panes — colorful emoji for instant pane recognition
   local titles = {
-    dapui_scopes      = " " .. ICON.scopes     .. " Scopes",
-    dapui_watches     = " " .. ICON.watches    .. " Watches",
-    dapui_stacks      = " " .. ICON.stacks     .. " Call Stack",
-    dapui_breakpoints = " " .. ICON.breakpoint .. " Breakpoints",
-    dapui_console     = " " .. ICON.terminal   .. " Console",
-    ["dap-repl"]      = " " .. ICON.chevron    .. " REPL",
+    dapui_scopes      = " " .. ICON.scopes      .. "  Scopes",
+    dapui_watches     = " " .. ICON.watches     .. "  Watches",
+    dapui_stacks      = " " .. ICON.stacks      .. "  Call Stack",
+    dapui_breakpoints = " " .. ICON.breakpoints .. "  Breakpoints",
+    dapui_console     = " " .. ICON.terminal    .. "  Console",
+    ["dap-repl"]      = " " .. ICON.repl        .. "  REPL",
   }
   vim.api.nvim_create_autocmd("FileType", {
     pattern = { "dapui_*", "dap-repl" },
@@ -487,22 +589,33 @@ end
 
 function M._install_for_buf(buf)
   if not vim.api.nvim_buf_is_valid(buf) then return end
+  -- Skip the control-bar buffer entirely — its own <LeftMouse> keymap handles
+  -- button clicks, and debug keys like `c` would fire accidentally on click.
+  if vim.bo[buf].filetype == "TurboDebugBar" then return end
+
   local acts = setup_actions()
   local ft = vim.bo[buf].filetype or ""
   local is_dapui = ft:match("^dapui_") or ft == "dap-repl"
   installed[buf] = installed[buf] or {}
   for name, key in pairs(config.opts.keys) do
-    if key and acts[name] and not installed[buf][name] then
+    if key and acts[name] then
       -- yield d/r to dapui's native remove/repl inside its own panes
       if not (is_dapui and (name == "step_into" or name == "step_out")) then
-        local prev_n = find_buf_mapping(buf, key, "n")
-        local prev_v = visual_actions[name] and find_buf_mapping(buf, key, "v") or nil
+        -- Only record prev-mapping on first install; subsequent installs
+        -- (force-reinstall on focus change) keep the original stash so
+        -- exit-time restoration still works.
+        local entry = installed[buf][name]
+        if not entry then
+          local prev_n = find_buf_mapping(buf, key, "n")
+          local prev_v = visual_actions[name] and find_buf_mapping(buf, key, "v") or nil
+          entry = { key = key, prev_n = prev_n, prev_v = prev_v }
+          installed[buf][name] = entry
+        end
         local opts = { buffer = buf, silent = true, nowait = true, desc = "turbo-debug: " .. name }
         pcall(vim.keymap.set, "n", key, acts[name], opts)
         if visual_actions[name] then
           pcall(vim.keymap.set, "v", key, acts[name], opts)
         end
-        installed[buf][name] = { key = key, prev_n = prev_n, prev_v = prev_v }
       end
     end
   end
@@ -529,7 +642,7 @@ end
 local function set_debug_chrome()
   active_win = vim.api.nvim_get_current_win()
   saved_winbar = vim.wo[active_win].winbar
-  vim.wo[active_win].winbar = "%#TurboDebugWinbar# " .. ICON.debug_alt .. " DEBUG %* " .. ICON.divider .. " %f"
+  vim.wo[active_win].winbar = "%#TurboDebugWinbar# " .. ICON.bug .. " DEBUG %* " .. ICON.divider .. " %f"
 end
 
 local function clear_debug_chrome()

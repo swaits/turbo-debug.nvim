@@ -21,21 +21,18 @@ function M.setup()
   vim.api.nvim_set_hl(0, "DapStoppedLine", { default = true, link = "Search" })
   vim.api.nvim_set_hl(0, "DapLogPoint", { default = true, link = "DiagnosticInfo" })
 
-  -- Gutter signs: Nerd Font Codicons (byte-escaped for tool-pipeline safety).
-  -- The DapStopped IP sign is an emoji 👉 (backhand index pointing right,
-  -- U+1F449) that literally points AT the paused line from the left. Pairs
-  -- with the 👈 emoji in the EOL virtual text (mode.lua) — both fingers
-  -- point at the current line from opposite sides, unmistakable.
-  --
-  --   nf-cod-debug-breakpoint              = U+EA71 ""
-  --   nf-cod-debug-breakpoint-conditional  = U+EA9F ""
-  --   nf-cod-circle-slash                  = U+EABE ""
-  --   nf-cod-debug-breakpoint-log          = U+EBE4 ""
-  vim.fn.sign_define("DapBreakpoint",          { text = "\xee\xa9\xb1", texthl = "DapBreakpoint",          numhl = "DapBreakpoint" })
-  vim.fn.sign_define("DapBreakpointCondition", { text = "\xee\xaa\x9f", texthl = "DapBreakpointCondition", numhl = "DapBreakpointCondition" })
-  vim.fn.sign_define("DapBreakpointRejected",  { text = "\xee\xaa\xbe", texthl = "DapBreakpointRejected",  numhl = "DapBreakpointRejected" })
+  -- Gutter signs: colorful emoji for instant recognition. Modern terminals
+  -- (Ghostty, Kitty, WezTerm, iTerm) render these full-color.
+  --   🔴 U+1F534 large red circle       = breakpoint
+  --   🟡 U+1F7E1 large yellow circle     = conditional breakpoint
+  --   ⭕ U+2B55  heavy large circle      = rejected breakpoint
+  --   👉 U+1F449 backhand pointing right = current execution line (IP)
+  --   📝 U+1F4DD memo                    = log point
+  vim.fn.sign_define("DapBreakpoint",          { text = "\xf0\x9f\x94\xb4", texthl = "DapBreakpoint",          numhl = "DapBreakpoint" })
+  vim.fn.sign_define("DapBreakpointCondition", { text = "\xf0\x9f\x9f\xa1", texthl = "DapBreakpointCondition", numhl = "DapBreakpointCondition" })
+  vim.fn.sign_define("DapBreakpointRejected",  { text = "\xe2\xad\x95",     texthl = "DapBreakpointRejected",  numhl = "DapBreakpointRejected" })
   vim.fn.sign_define("DapStopped",             { text = "\xf0\x9f\x91\x89", texthl = "DapStopped", linehl = "DapStoppedLine", numhl = "DapStopped" })
-  vim.fn.sign_define("DapLogPoint",            { text = "\xee\xaf\xa4", texthl = "DapLogPoint",            numhl = "DapLogPoint" })
+  vim.fn.sign_define("DapLogPoint",            { text = "\xf0\x9f\x93\x9d", texthl = "DapLogPoint",            numhl = "DapLogPoint" })
 
   -- unobtrusive inline virtual text: italic, comment-colored
   vim.api.nvim_set_hl(0, "NvimDapVirtualText", { default = true, link = "Comment", italic = true })
@@ -54,14 +51,15 @@ function M.setup()
   vim.api.nvim_set_hl(0, "TurboDebugCtrlMuted",       { default = true, link = "Comment" })
 
   -- derived highlight: the IP "reason" vtext (STEP / BREAKPOINT / EXCEPTION /
-  -- PAUSE / etc.) — bold + the WarningMsg color so it jumps off the screen.
-  -- nvim_set_hl can't combine link + bold, so copy attrs explicitly and
-  -- re-apply on ColorScheme so theme switches don't blank it out.
+  -- PAUSE / etc.) — bold + reverse + WarningMsg color so it renders as an
+  -- inverted-color badge that absolutely demands attention. nvim_set_hl
+  -- can't combine link + bold, so copy attrs explicitly and re-apply on
+  -- ColorScheme so theme switches don't blank it out.
   local function apply_ip_reason_hl()
     local ok, src = pcall(vim.api.nvim_get_hl, 0, { name = "WarningMsg", link = false })
     if not ok or not src or not src.fg then return end
     vim.api.nvim_set_hl(0, "TurboDebugIPReason", {
-      fg = src.fg, bg = src.bg, bold = true, default = true,
+      fg = src.fg, bg = src.bg, bold = true, reverse = true, default = true,
     })
   end
   apply_ip_reason_hl()

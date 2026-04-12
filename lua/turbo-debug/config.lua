@@ -80,6 +80,12 @@ M.defaults = {
     },
     floating = { border = "rounded", mappings = { close = { "q", "<Esc>" } } },
     render = { indent = 2, max_type_length = 20 },
+    -- dapui's `expand_lines` spawns a cursor-pinned floating window when a
+    -- line is longer than the pane width — that float bleeds across the
+    -- entire screen for long register dumps. We wrap inside the pane instead
+    -- (wrap=true + breakindent + showbreak in set_dapui_window_opts), so this
+    -- hover is both redundant and destructive. Kill it.
+    expand_lines = false,
     -- layouts are built dynamically from `sidebar` in mode.lua; override
     -- `layouts` here to fully customize.
     layouts = nil,
