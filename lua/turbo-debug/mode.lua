@@ -34,6 +34,15 @@ local installed = {}
 -- our initial proportions.
 local last_dapui_total_height = nil
 
+-- The user's theme's WinSeparator highlight, captured on debug-mode enter
+-- before we override it to the bright TurboDebugBarSeparator color. We
+-- want EVERY horizontal/vertical split divider in the editor to match our
+-- bar separator style during a debug session — the dim default makes
+-- dapui's pane-to-pane boundaries look like a visual seam, while the
+-- bright override gives the whole debug UI a single consistent chrome
+-- color. Restored byte-for-byte on M.exit.
+local saved_winsep_hl = nil
+
 local dapui_initialized = false
 local vt_initialized = false
 
@@ -163,6 +172,26 @@ local function define_highlights()
   hl(0, "TurboDebugBarReady",       { default = true, link = "DiagnosticHint" })
   hl(0, "TurboDebugBarRunning",     { default = true, link = "DiagnosticInfo" })
   hl(0, "TurboDebugBarPaused",      { default = true, link = "DiagnosticError" })
+  -- Italic qualifier words ("over", "into", "out") shown after the
+  -- step/descend/return labels. Subordinate styling: Comment fg + italic,
+  -- so the key label ("(s)tep") reads primary and the qualifier ("over")
+  -- reads secondary. Can't combine link+italic via nvim_set_hl; derive
+  -- fg from Comment and set italic explicitly.
+  local function apply_italic_hl()
+    local ok, src = pcall(vim.api.nvim_get_hl, 0, { name = "Comment", link = false })
+    if not ok or not src or not src.fg then
+      vim.api.nvim_set_hl(0, "TurboDebugBarItalic", { default = true, link = "Comment" })
+      return
+    end
+    vim.api.nvim_set_hl(0, "TurboDebugBarItalic", {
+      fg = src.fg, italic = true, default = true,
+    })
+  end
+  apply_italic_hl()
+  vim.api.nvim_create_autocmd("ColorScheme", {
+    group = vim.api.nvim_create_augroup("TurboDebugBarItalicHL", { clear = true }),
+    callback = apply_italic_hl,
+  })
 
   -- The key letter inside (c)ontinue etc. gets bold + Special's fg.
   -- No underline — the descender on lowercase q/g/p/y overlaps the
@@ -191,6 +220,12 @@ local function define_highlights()
   -- the semantic we want for our bar edges. Theme-agnostic. If
   -- WinBar has no fg (very rare), fall back to WinSeparator so
   -- we at least match the theme's split-divider convention.
+  --
+  -- Also override the global WinSeparator to the same fg during
+  -- debug mode, so every split divider in the editor matches our
+  -- bar chrome (dapui pane-to-pane, source-to-console, our bars to
+  -- their neighbors — all one consistent color). Original captured
+  -- on first call, restored in M.exit.
   local function apply_sep_hl()
     local ok, src = pcall(vim.api.nvim_get_hl, 0, { name = "WinBar", link = false })
     if ok and src and src.fg then
@@ -198,6 +233,11 @@ local function define_highlights()
       -- we set in the table-of-defaults above. default semantics
       -- would leave the placeholder in place.
       vim.api.nvim_set_hl(0, "TurboDebugBarSeparator", { fg = src.fg })
+      if saved_winsep_hl == nil then
+        local wok, ws = pcall(vim.api.nvim_get_hl, 0, { name = "WinSeparator", link = false })
+        if wok then saved_winsep_hl = ws or {} end
+      end
+      vim.api.nvim_set_hl(0, "WinSeparator", { fg = src.fg })
       return
     end
     vim.api.nvim_set_hl(0, "TurboDebugBarSeparator", { link = "WinSeparator" })
@@ -272,9 +312,12 @@ local function keyof(name, fallback)
   return fallback
 end
 
--- Build a label's byte-level representation: returns { text, hl_spans, key_col, key_end_col }
--- Format: "<icon> (<key>)<tail>"  e.g.  ` (c)ontinue` with byte offsets for highlights.
-local function build_control_text(icon, key, tail)
+-- Build a label's byte-level representation.
+-- Format: "<icon> (<key>)<tail>[ <italic>]"
+--   e.g.  ` (s)tep over`  with `over` styled italic.
+-- Returns: text, key_col, key_end_col, italic_col, italic_end_col
+--   (italic_col/italic_end_col are nil when italic is not set).
+local function build_control_text(icon, key, tail, italic)
   local parts = {}
   local function add(s) parts[#parts + 1] = s end
   local function col() return #table.concat(parts) end
@@ -286,8 +329,15 @@ local function build_control_text(icon, key, tail)
   local key_end_col = col()
   add(")")
   add(tail or "")
+  local italic_col, italic_end_col
+  if italic and italic ~= "" then
+    add(" ")
+    italic_col = col()
+    add(italic)
+    italic_end_col = col()
+  end
 
-  return table.concat(parts), key_col, key_end_col
+  return table.concat(parts), key_col, key_end_col, italic_col, italic_end_col
 end
 
 local function render_sbar()
@@ -378,36 +428,50 @@ local function render_cbar()
   local quit_tail = has_session and " terminate" or "uit"
 
   local controls = {
-    { icon = continue_icon,  key = keyof("continue",  "c"), tail = continue_tail, fn = action("continue")  },
-    { icon = ICON.step_over, key = keyof("step_over", "s"), tail = "tep",         fn = action("step_over") },
-    { icon = ICON.step_into, key = keyof("step_into", "d"), tail = "escend",      fn = action("step_into") },
-    { icon = ICON.step_out,  key = keyof("step_out",  "r"), tail = "eturn",       fn = action("step_out")  },
+    { icon = continue_icon,  key = keyof("continue",  "c"), tail = continue_tail, italic = nil,    fn = action("continue")  },
+    { icon = ICON.step_over, key = keyof("step_over", "s"), tail = "tep",         italic = "over", fn = action("step_over") },
+    { icon = ICON.step_into, key = keyof("step_into", "d"), tail = "escend",      italic = "into", fn = action("step_into") },
+    { icon = ICON.step_out,  key = keyof("step_out",  "r"), tail = "eturn",       italic = "out",  fn = action("step_out")  },
   }
   -- (R)estart is only meaningful during an active session
   if has_session then
-    controls[#controls + 1] = { icon = ICON.restart, key = keyof("restart", "R"), tail = "estart", fn = action("restart") }
+    controls[#controls + 1] = { icon = ICON.restart, key = keyof("restart", "R"), tail = "estart", italic = nil, fn = action("restart") }
   end
-  controls[#controls + 1] = { icon = ICON.stop, key = keyof("terminate", "q"), tail = quit_tail, fn = action("terminate") }
+  controls[#controls + 1] = { icon = ICON.stop, key = keyof("terminate", "q"), tail = quit_tail, italic = nil, fn = action("terminate") }
 
-  local ctrl_parts = {}
-  local ctrl_spans = {}
-  local ctrl_key_spans = {}
-  local ctrl_zones_bytes = {}
   local gap = "   "
-  for i, c in ipairs(controls) do
-    local prefix_len = #table.concat(ctrl_parts)
-    if i > 1 then
-      ctrl_parts[#ctrl_parts + 1] = gap
-      prefix_len = prefix_len + #gap
+  local function build_controls(include_italic)
+    local parts, spans, key_spans, italic_spans, zones = {}, {}, {}, {}, {}
+    for i, c in ipairs(controls) do
+      local prefix_len = #table.concat(parts)
+      if i > 1 then
+        parts[#parts + 1] = gap
+        prefix_len = prefix_len + #gap
+      end
+      local italic_text = include_italic and c.italic or nil
+      local txt, kcol, kend, icol, iend = build_control_text(c.icon, c.key, c.tail, italic_text)
+      parts[#parts + 1] = txt
+      spans[#spans + 1] = { prefix_len, prefix_len + #txt, "TurboDebugBarCtrl" }
+      key_spans[#key_spans + 1] = { prefix_len + kcol, prefix_len + kend }
+      if icol then
+        italic_spans[#italic_spans + 1] = { prefix_len + icol, prefix_len + iend }
+      end
+      zones[#zones + 1] = { prefix_len, prefix_len + #txt, c.fn }
     end
-    local txt, kcol, kend = build_control_text(c.icon, c.key, c.tail)
-    ctrl_parts[#ctrl_parts + 1] = txt
-    ctrl_spans[#ctrl_spans + 1] = { prefix_len, prefix_len + #txt, "TurboDebugBarCtrl" }
-    ctrl_key_spans[#ctrl_key_spans + 1] = { prefix_len + kcol, prefix_len + kend }
-    ctrl_zones_bytes[#ctrl_zones_bytes + 1] = { prefix_len, prefix_len + #txt, c.fn }
+    return table.concat(parts), spans, key_spans, italic_spans, zones
   end
-  local controls_text = table.concat(ctrl_parts)
+
+  -- Try with italic qualifiers first; fall back to the compact form if
+  -- the label row would overflow the available width. Min 1-char padding
+  -- on each side of the controls-plus-help block.
+  local controls_text, ctrl_spans, ctrl_key_spans, ctrl_italic_spans, ctrl_zones_bytes =
+    build_controls(true)
   local controls_dw = vim.fn.strdisplaywidth(controls_text)
+  if controls_dw + help_dw + 2 > width then
+    controls_text, ctrl_spans, ctrl_key_spans, ctrl_italic_spans, ctrl_zones_bytes =
+      build_controls(false)
+    controls_dw = vim.fn.strdisplaywidth(controls_text)
+  end
 
   -- controls centered between left edge and help (right anchor)
   local ctrl_zone_width = width - help_dw
@@ -439,6 +503,11 @@ local function render_cbar()
   for _, span in ipairs(ctrl_key_spans) do
     pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 0, ctrl_byte_offset + span[1], {
       end_row = 0, end_col = ctrl_byte_offset + span[2], hl_group = "TurboDebugBarKey",
+    })
+  end
+  for _, span in ipairs(ctrl_italic_spans) do
+    pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 0, ctrl_byte_offset + span[1], {
+      end_row = 0, end_col = ctrl_byte_offset + span[2], hl_group = "TurboDebugBarItalic",
     })
   end
 
@@ -1332,6 +1401,10 @@ function M.exit()
   close_bars()
   if vt_initialized then require("nvim-dap-virtual-text").disable() end
   last_dapui_total_height = nil
+  if saved_winsep_hl ~= nil then
+    pcall(vim.api.nvim_set_hl, 0, "WinSeparator", saved_winsep_hl)
+    saved_winsep_hl = nil
+  end
 end
 
 function M.toggle()
