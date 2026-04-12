@@ -67,8 +67,9 @@ local function build_default_layouts()
       },
     },
     {
+      -- 9 rows (was 12) to leave room for the 3-row control bar below
       position = "bottom",
-      size = 12,
+      size = 9,
       elements = {
         { id = "repl",    size = 0.50 },
         { id = "console", size = 0.50 },
@@ -85,8 +86,9 @@ local function define_highlights()
   hl(0, "TurboDebugBorderInactive", { default = true, link = "Comment" })
   hl(0, "TurboDebugWinbar",         { default = true, link = "DiagnosticError" })
   hl(0, "TurboDebugBar",            { default = true, link = "StatusLine" })
-  hl(0, "TurboDebugBarSeparator",   { default = true, link = "WinSeparator" })
-  hl(0, "TurboDebugBarCtrl",        { default = true, link = "Function" })
+  hl(0, "TurboDebugBarSeparator",   { default = true, link = "FloatBorder" })
+  hl(0, "TurboDebugBarCtrl",        { default = true, link = "StatusLine" })
+  hl(0, "TurboDebugBarKey",         { default = true, link = "Special" })
   hl(0, "TurboDebugBarStatus",      { default = true, link = "Comment" })
   hl(0, "TurboDebugBarReady",       { default = true, link = "DiagnosticHint" })
   hl(0, "TurboDebugBarRunning",     { default = true, link = "DiagnosticInfo" })
@@ -144,91 +146,174 @@ local function action(name)
   return function() local a = M.actions(); if a[name] then a[name]() end end
 end
 
+-- Helper to look up a configured modal key letter. Falls back to the given
+-- default so the bar never blanks out if the user remapped something.
+local function keyof(name, fallback)
+  local k = config.opts.keys[name]
+  if type(k) == "string" then return k end
+  return fallback
+end
+
+-- Build one control label: returns { segments = { {text, hl, key_span=?}, ... }, fn = action-fn }
+-- The label looks like "▶️ (c)ontinue" — the whole text is one click zone;
+-- the parenthesized key letter gets a distinct TurboDebugBarKey highlight.
+local function build_label(icon, key, word_head, word_tail, fn)
+  -- layout: "<icon> (<key>)<word_tail>"  e.g. "▶️ (c)ontinue"
+  -- but to match the mnemonic style from help: "(c)ontinue" etc.
+  -- word_head + "(" + key + ")" + word_tail  allows things like  "run to (C) cursor"
+  return {
+    icon = icon,
+    key  = key,
+    head = word_head or "",
+    tail = word_tail or "",
+    fn   = fn,
+  }
+end
+
 local function render_bar()
   if not (bar_buf and vim.api.nvim_buf_is_valid(bar_buf)) then return end
   if not (bar_win and vim.api.nvim_win_is_valid(bar_win)) then return end
 
   local width = vim.api.nvim_win_get_width(bar_win)
+  if width < 1 then width = vim.o.columns end
   local sep = string.rep(ICON.hline, width)
 
-  -- build the content row as a list of { text, hl, click_fn? } segments
   local state, state_hl = dap_state()
 
-  local buttons = {
-    { text = "  " .. ICON.play       .. "  ", fn = action("continue"),  hl = "TurboDebugBarCtrl" },
-    { text = "  " .. ICON.step_over  .. "  ", fn = action("step_over"), hl = "TurboDebugBarCtrl" },
-    { text = "  " .. ICON.step_into  .. "  ", fn = action("step_into"), hl = "TurboDebugBarCtrl" },
-    { text = "  " .. ICON.step_out   .. "  ", fn = action("step_out"),  hl = "TurboDebugBarCtrl" },
-    { text = "  " .. ICON.restart    .. "  ", fn = action("restart"),   hl = "TurboDebugBarCtrl" },
-    { text = "  " .. ICON.stop       .. "  ", fn = action("terminate"), hl = "TurboDebugBarCtrl" },
-    { text = "  " .. ICON.close      .. "  ", fn = function() M.toggle() end, hl = "TurboDebugBarCtrl" },
-  }
-
-  -- state chip: " 🐛 DEBUG · READY "
+  -- State chip: e.g. " 🐛 DEBUG · PAUSED "
   local chip = " " .. ICON.bug .. " DEBUG " .. ICON.divider .. " " .. state .. " "
 
-  -- right-side: dap.status() + " %l:%c " (no %l/%c in buffer — fill with something static)
+  -- Control labels. Each: (icon)(space)((key))word. Click zone spans all.
+  local labels = {
+    build_label(ICON.play,      keyof("continue",   "c"), "",        "ontinue",    action("continue")),
+    build_label(ICON.step_over, keyof("step_over",  "s"), "",        "tep",        action("step_over")),
+    build_label(ICON.step_into, keyof("step_into",  "d"), "",        "escend",     action("step_into")),
+    build_label(ICON.step_out,  keyof("step_out",   "r"), "",        "eturn",      action("step_out")),
+    build_label(ICON.restart,   keyof("restart",    "R"), "",        "estart",     action("restart")),
+    build_label(ICON.stop,      keyof("terminate",  "q"), "",        "uit",        action("terminate")),
+    build_label("\xe2\x9d\x93", keyof("help",       "?"), "",        ")help" ~= nil and "help" or "help",
+                function() require("turbo-debug.help").open() end),
+  }
+  -- Fix the last label's construction (the above is awkward because of the
+  -- "(?)help" edge case where key is "?" and the "word" is just "help").
+  labels[#labels] = {
+    icon = "\xe2\x9d\x93",  -- ❓
+    key  = keyof("help", "?"),
+    head = "",
+    tail = "help",
+    fn   = function() require("turbo-debug.help").open() end,
+    no_attach = true,  -- render as "❓ (?) help" with a space after )
+  }
+
+  -- dap.status() on the right
   local status_ok, status_msg = pcall(function() return require("dap").status() end)
   if not status_ok then status_msg = "" end
   local right = (status_msg ~= "" and (status_msg .. " ") or "")
 
-  -- compose line: [chip][buttons...][right-align fills][right]
-  local left = chip
-  for _, b in ipairs(buttons) do left = left .. b.text end
-  local pad_len = width - vim.fn.strdisplaywidth(left) - vim.fn.strdisplaywidth(right)
-  if pad_len < 1 then pad_len = 1 end
-  local line = left .. string.rep(" ", pad_len) .. right
+  -- Build the content line piece by piece, tracking (col, end_col, hl) spans
+  -- for extmarks AND (col, end_col, fn) zones for click dispatch.
+  local pieces = { chip }  -- start with chip text
+  local hl_spans = { { 0, #chip, state_hl } }
+  click_zones = {}
+
+  local function byte_col() return #table.concat(pieces) end
+
+  for _, lb in ipairs(labels) do
+    -- leading gap between labels
+    local gap = "   "
+    pieces[#pieces + 1] = gap
+
+    local label_start = byte_col()
+    -- icon
+    pieces[#pieces + 1] = lb.icon
+    pieces[#pieces + 1] = " "
+    -- head + "(" + key + ")" + tail  (e.g. "run to (C) cursor" → head="run to " tail=" cursor")
+    pieces[#pieces + 1] = lb.head
+    local paren_open_col = byte_col()
+    pieces[#pieces + 1] = "("
+    local key_col = byte_col()
+    pieces[#pieces + 1] = lb.key
+    local key_end_col = byte_col()
+    pieces[#pieces + 1] = ")"
+    local paren_close_col = byte_col()
+    if lb.no_attach then pieces[#pieces + 1] = " " end
+    pieces[#pieces + 1] = lb.tail
+    local label_end = byte_col()
+
+    -- highlight: the paren+key differently
+    hl_spans[#hl_spans + 1] = { label_start, label_end, "TurboDebugBarCtrl" }
+    hl_spans[#hl_spans + 1] = { key_col, key_end_col, "TurboDebugBarKey" }
+
+    click_zones[#click_zones + 1] = { label_start, label_end, lb.fn }
+  end
+
+  local line = table.concat(pieces)
+
+  -- right-align the status text
+  local line_dwidth = vim.fn.strdisplaywidth(line)
+  local right_dwidth = vim.fn.strdisplaywidth(right)
+  local pad = width - line_dwidth - right_dwidth
+  if pad < 1 then pad = 1 end
+  local padding = string.rep(" ", pad)
+  local right_byte_start = #line + #padding
+  line = line .. padding .. right
+
+  -- safety: if content is still wider than window, truncate
   if vim.fn.strdisplaywidth(line) > width then
-    -- crude truncate to avoid wrap
     line = line:sub(1, width)
   end
 
   vim.bo[bar_buf].modifiable = true
-  vim.api.nvim_buf_set_lines(bar_buf, 0, -1, false, { sep, line })
+  vim.api.nvim_buf_set_lines(bar_buf, 0, -1, false, { sep, line, sep })
   vim.bo[bar_buf].modifiable = false
 
-  -- separator line highlight
   vim.api.nvim_buf_clear_namespace(bar_buf, bar_ns, 0, -1)
+
+  -- top + bottom separator highlights
   vim.api.nvim_buf_set_extmark(bar_buf, bar_ns, 0, 0, {
     end_row = 0, end_col = #sep, hl_group = "TurboDebugBarSeparator",
   })
-
-  -- state chip highlight
-  vim.api.nvim_buf_set_extmark(bar_buf, bar_ns, 1, 0, {
-    end_row = 1, end_col = #chip, hl_group = state_hl,
+  vim.api.nvim_buf_set_extmark(bar_buf, bar_ns, 2, 0, {
+    end_row = 2, end_col = #sep, hl_group = "TurboDebugBarSeparator",
   })
 
-  -- button highlights + click zones (reset first)
-  click_zones = {}
-  local col = #chip
-  for _, b in ipairs(buttons) do
-    vim.api.nvim_buf_set_extmark(bar_buf, bar_ns, 1, col, {
-      end_row = 1, end_col = col + #b.text, hl_group = b.hl,
-    })
-    -- click zones use DISPLAY columns for comparison, computed from byte offset
-    local text_before = line:sub(1, col)
-    local text_after = line:sub(1, col + #b.text)
-    local dcol_start = vim.fn.strdisplaywidth(text_before)
-    local dcol_end = vim.fn.strdisplaywidth(text_after)
-    click_zones[#click_zones + 1] = { dcol_start, dcol_end, b.fn }
-    col = col + #b.text
+  -- content-line highlights
+  for _, span in ipairs(hl_spans) do
+    local col_start, col_end = span[1], span[2]
+    if col_end > #line then col_end = #line end
+    if col_start < col_end then
+      pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, col_start, {
+        end_row = 1, end_col = col_end, hl_group = span[3],
+      })
+    end
   end
 
   -- right-side status highlight
-  if right ~= "" then
-    local right_byte_start = #line - #right
-    vim.api.nvim_buf_set_extmark(bar_buf, bar_ns, 1, right_byte_start, {
+  if right ~= "" and right_byte_start < #line then
+    pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, right_byte_start, {
       end_row = 1, end_col = #line, hl_group = "TurboDebugBarStatus",
     })
+  end
+
+  -- convert byte-based click zones to display-column-based for mouse lookup
+  for i, z in ipairs(click_zones) do
+    local text_before = line:sub(1, z[1])
+    local text_through = line:sub(1, z[2])
+    click_zones[i] = {
+      vim.fn.strdisplaywidth(text_before),
+      vim.fn.strdisplaywidth(text_through),
+      z[3],
+    }
   end
 end
 
 local function bar_position()
+  -- 3 rows (─ top, content, ─ bottom). Sits above the statusline.
   local row
   if vim.o.laststatus > 0 then
-    row = vim.o.lines - vim.o.cmdheight - 3  -- 2 rows for bar + 1 for statusline
+    row = vim.o.lines - vim.o.cmdheight - 4  -- 3 (bar) + 1 (statusline)
   else
-    row = vim.o.lines - vim.o.cmdheight - 2  -- 2 rows for bar
+    row = vim.o.lines - vim.o.cmdheight - 3  -- 3 (bar)
   end
   if row < 0 then row = 0 end
   return {
@@ -236,7 +321,7 @@ local function bar_position()
     row       = row,
     col       = 0,
     width     = vim.o.columns,
-    height    = 2,
+    height    = 3,
     style     = "minimal",
     border    = "none",
     focusable = false,
@@ -246,11 +331,11 @@ local function bar_position()
 end
 
 local function handle_bar_click()
-  -- mouse click dispatch: look up current column, find matching zone
   local pos = vim.fn.getmousepos()
   if not pos or pos.winid ~= bar_win then return end
-  if pos.line ~= 2 then return end  -- only row 2 (the controls row)
-  local col = pos.wincol - 1  -- 1-based → 0-based display column
+  -- only the middle (content) row is clickable; top/bottom are separators
+  if pos.line ~= 2 then return end
+  local col = pos.wincol - 1
   for _, zone in ipairs(click_zones) do
     if col >= zone[1] and col < zone[2] then
       zone[3]()

@@ -1,7 +1,9 @@
 local M = {}
 
 M.defaults = {
-  help_on_enter = true,
+  -- The 3-row control bar shows `(?)help` so users can always see where to
+  -- get the key reference. No auto-popup needed on entry.
+  help_on_enter = false,
   builtin_adapters = true,
 
   -- When `c` is pressed with no breakpoints set, launch the first adapter
