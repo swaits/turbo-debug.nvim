@@ -74,7 +74,7 @@ function M.close()
   buf_id = nil
 end
 
-function M.open()
+local function show(auto_dismiss)
   M.close()
 
   local lines, width = build_content()
@@ -83,18 +83,14 @@ function M.open()
   buf_id = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf_id, 0, -1, false, lines)
 
-  -- highlight the "Press ? for help" line
   local hl_line = height - 2
   vim.api.nvim_buf_add_highlight(buf_id, -1, "Bold", hl_line, 0, -1)
 
   vim.bo[buf_id].modifiable = false
   vim.bo[buf_id].bufhidden = "wipe"
 
-  -- center the float
-  local ed_w = vim.o.columns
-  local ed_h = vim.o.lines
-  local row = math.floor((ed_h - height) / 2)
-  local col = math.floor((ed_w - width) / 2)
+  local row = math.floor((vim.o.lines - height) / 2)
+  local col = math.floor((vim.o.columns - width) / 2)
 
   win_id = vim.api.nvim_open_win(buf_id, false, {
     relative = "editor",
@@ -108,9 +104,23 @@ function M.open()
     noautocmd = true,
   })
 
-  -- auto-close after 2 seconds
-  timer = vim.uv.new_timer()
-  timer:start(2000, 0, vim.schedule_wrap(function() M.close() end))
+  if auto_dismiss then
+    timer = vim.uv.new_timer()
+    timer:start(3000, 0, vim.schedule_wrap(function() M.close() end))
+  else
+    vim.api.nvim_create_autocmd({ "CursorMoved", "InsertEnter", "CmdlineEnter" }, {
+      once = true,
+      callback = function() M.close() end,
+    })
+  end
+end
+
+function M.open()
+  show(false)
+end
+
+function M.splash()
+  show(true)
 end
 
 function M.is_open()

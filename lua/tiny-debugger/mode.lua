@@ -185,7 +185,7 @@ function M.enter()
   require("nvim-dap-virtual-text").enable()
 
   if config.opts.help_on_enter then
-    help.open()
+    help.splash()
   end
 end
 
