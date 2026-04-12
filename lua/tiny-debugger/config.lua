@@ -3,6 +3,7 @@ local M = {}
 M.defaults = {
   help_on_enter = true,
   builtin_adapters = true,
+  quit_exits_mode = true, -- q terminates AND exits debug mode (false = terminate only)
 
   -- modal keys (active only during debug mode, single-key)
   keys = {
@@ -11,6 +12,9 @@ M.defaults = {
     step_into = "d",
     step_out = "r",
     run_to_cursor = "C",
+    breakpoint = "x",
+    cond_breakpoint = "X",
+    clear_breakpoints = "D",
     watch = "W",
     hover = "K",
     eval = "E",

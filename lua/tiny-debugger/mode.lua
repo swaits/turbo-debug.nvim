@@ -8,6 +8,7 @@ local active_buf = nil
 local active_win = nil
 local stashed_maps = {}
 local saved_winbar = nil
+local mapped_keys = {} -- track exactly which keys we set, for reliable cleanup
 
 -- one-time dap-ui and virtual-text initialization
 local dapui_initialized = false
@@ -92,16 +93,27 @@ local visual_actions = { watch = true, hover = true }
 local function setup_actions()
   if next(actions) then return end
   local dap = require("dap")
+  local pb = require("persistent-breakpoints.api")
+
   actions.continue = function() dap.continue() end
   actions.step_over = function() dap.step_over() end
   actions.step_into = function() dap.step_into() end
   actions.step_out = function() dap.step_out() end
   actions.run_to_cursor = function() dap.run_to_cursor() end
-  actions.terminate = function() dap.terminate(); M.exit() end
   actions.restart = function() dap.restart() end
   actions.help = function()
     if help.is_open() then help.close() else help.open() end
   end
+  actions.terminate = function()
+    dap.terminate()
+    if config.opts.quit_exits_mode then M.exit() end
+  end
+
+  -- breakpoint actions (modal shortcuts for the <leader>d* globals)
+  actions.breakpoint = function() pb.toggle_breakpoint() end
+  actions.cond_breakpoint = function() pb.set_conditional_breakpoint() end
+  actions.clear_breakpoints = function() pb.clear_all_breakpoints() end
+
   actions.watch = function()
     local expr
     if vim.fn.mode() == "v" or vim.fn.mode() == "V" then
@@ -119,8 +131,10 @@ local function setup_actions()
 end
 
 -- keymap lifecycle
+-- track every key we set so cleanup is exact — never miss one, never clear the wrong one
 
 local function set_keymaps(buf)
+  mapped_keys = {}
   local keys = config.opts.keys
   for name, key in pairs(keys) do
     if key and actions[name] then
@@ -129,21 +143,25 @@ local function set_keymaps(buf)
       if visual_actions[name] then
         vim.keymap.set("v", key, actions[name], { buffer = buf, silent = true, desc = "tiny-debugger: " .. name })
       end
+      mapped_keys[#mapped_keys + 1] = { name = name, key = key }
     end
   end
 end
 
 local function clear_keymaps(buf)
-  local keys = config.opts.keys
-  for name, key in pairs(keys) do
-    if key and actions[name] then
-      pcall(vim.keymap.del, "n", key, { buffer = buf })
-      if visual_actions[name] then
-        pcall(vim.keymap.del, "v", key, { buffer = buf })
-      end
-      restore_mapping(buf, key)
-    end
+  if not vim.api.nvim_buf_is_valid(buf) then
+    mapped_keys = {}
+    stashed_maps = {}
+    return
   end
+  for _, mk in ipairs(mapped_keys) do
+    pcall(vim.keymap.del, "n", mk.key, { buffer = buf })
+    if visual_actions[mk.name] then
+      pcall(vim.keymap.del, "v", mk.key, { buffer = buf })
+    end
+    restore_mapping(buf, mk.key)
+  end
+  mapped_keys = {}
   stashed_maps = {}
 end
 
@@ -153,7 +171,6 @@ local function set_debug_chrome()
   active_win = vim.api.nvim_get_current_win()
   saved_winbar = vim.wo[active_win].winbar
   vim.wo[active_win].winbar = "%#DiagnosticError# 🐛 DEBUG %* %f"
-
   vim.api.nvim_set_hl(0, "Cursor", { bg = "#ff6600", fg = "#000000" })
 end
 
@@ -163,7 +180,6 @@ local function clear_debug_chrome()
   end
   active_win = nil
   saved_winbar = nil
-
   vim.api.nvim_set_hl(0, "Cursor", {})
 end
 

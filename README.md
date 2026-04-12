@@ -27,12 +27,13 @@ During debug mode, single-key controls:
 
 | Key | Action | Key | Action |
 |-----|--------|-----|--------|
-| `c` | Continue | `W` | Watch expression |
-| `s` | Step over | `K` | Hover / inspect |
-| `d` | Step into | `E` | Eval in REPL |
-| `r` | Step out | `q` | Terminate session |
-| `C` | Run to cursor | `R` | Restart session |
-| `?` | Help popup | | |
+| `c` | Continue | `x` | Toggle breakpoint |
+| `s` | Step over | `X` | Conditional breakpoint |
+| `d` | Step into | `D` | Clear all breakpoints |
+| `r` | Step out | `W` | Watch expression |
+| `C` | Run to cursor | `K` | Hover / inspect |
+| `q` | Terminate session | `E` | Eval in REPL |
+| `R` | Restart session | `?` | Help popup |
 
 All navigation keys preserved. Modal keybindings vanish when you exit debug mode.
 
