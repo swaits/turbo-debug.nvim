@@ -200,9 +200,17 @@ local function define_highlights()
   })
 end
 
+-- winhighlight strings applied to dapui panes. `WinBar:WinBar,WinBarNC:WinBar`
+-- is defensive — if the user's theme makes WinBarNC dimmer than WinBar, this
+-- forces the pane's winbar row to stay bright even when the pane is
+-- unfocused (nvim renders unfocused wins with WinBarNC). Nordfox happens to
+-- make them identical; other themes don't.
+local DAPUI_WINHL_ACTIVE = "WinBar:WinBar,WinBarNC:WinBar,WinSeparator:TurboDebugBorderActive,FloatBorder:TurboDebugBorderActive"
+local DAPUI_WINHL_INACTIVE = "WinBar:WinBar,WinBarNC:WinBar,WinSeparator:TurboDebugBorderInactive,FloatBorder:TurboDebugBorderInactive"
+
 local function setup_active_win_highlights()
-  local active_hl = "WinSeparator:TurboDebugBorderActive,FloatBorder:TurboDebugBorderActive"
-  local inactive_hl = "WinSeparator:TurboDebugBorderInactive,FloatBorder:TurboDebugBorderInactive"
+  local active_hl = DAPUI_WINHL_ACTIVE
+  local inactive_hl = DAPUI_WINHL_INACTIVE
 
   local group = vim.api.nvim_create_augroup("TurboDebugActiveWin", { clear = true })
   local function apply(win, hl)
@@ -309,18 +317,20 @@ local function render_sbar()
   local pad_right = remain - pad_left
   local content_line = brand_text .. string.rep(" ", pad_left) .. status_msg .. string.rep(" ", pad_right) .. state_chip
 
-  -- 2 rows: sep / content.
-  -- Only the outward (top) edge gets our separator. The inward (bottom)
-  -- edge abuts dapui's top pane, whose winbar row (pane title like
-  -- "🧊 Call Stack") serves as the visual boundary. Drawing our own
-  -- bottom separator would stack two bright rows of chrome there.
+  -- 3 rows: top sep / content / bottom sep. BOTH edges use the bright
+  -- TurboDebugBarSeparator color so the bar reads as a clearly framed
+  -- region regardless of what sits above or below (tabline, dapui pane,
+  -- source buffer — all have different chrome conventions).
   vim.bo[sbar_buf].modifiable = true
-  vim.api.nvim_buf_set_lines(sbar_buf, 0, -1, false, { sep, content_line })
+  vim.api.nvim_buf_set_lines(sbar_buf, 0, -1, false, { sep, content_line, sep })
   vim.bo[sbar_buf].modifiable = false
 
   vim.api.nvim_buf_clear_namespace(sbar_buf, bar_ns, 0, -1)
   pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 0, 0, {
     end_row = 0, end_col = #sep, hl_group = "TurboDebugBarSeparator",
+  })
+  pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 2, 0, {
+    end_row = 2, end_col = #sep, hl_group = "TurboDebugBarSeparator",
   })
   -- content row
   pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 1, 0, {
@@ -401,36 +411,37 @@ local function render_cbar()
   if ctrl_pad_right < 1 then ctrl_pad_right = 1 end
   local content_line = string.rep(" ", ctrl_pad_left) .. controls_text .. string.rep(" ", ctrl_pad_right) .. help_text
 
-  -- 2 rows: content / sep.
-  -- Only the outward (bottom) edge gets our separator. The inward
-  -- (top) edge abuts dapui's bottom pane (Breakpoints) whose winbar
-  -- row acts as the visual boundary. Drawing our own top separator
-  -- would stack two bright rows of chrome there.
+  -- 3 rows: top sep / content / bottom sep. Both edges bright for a
+  -- visible frame, independent of what sits above (dapui Console) or
+  -- below (statusline/tabline).
   vim.bo[cbar_buf].modifiable = true
-  vim.api.nvim_buf_set_lines(cbar_buf, 0, -1, false, { content_line, sep })
+  vim.api.nvim_buf_set_lines(cbar_buf, 0, -1, false, { sep, content_line, sep })
   vim.bo[cbar_buf].modifiable = false
 
   vim.api.nvim_buf_clear_namespace(cbar_buf, bar_ns, 0, -1)
-  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, 0, {
-    end_row = 1, end_col = #sep, hl_group = "TurboDebugBarSeparator",
+  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 0, 0, {
+    end_row = 0, end_col = #sep, hl_group = "TurboDebugBarSeparator",
+  })
+  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 2, 0, {
+    end_row = 2, end_col = #sep, hl_group = "TurboDebugBarSeparator",
   })
 
-  -- control labels on row 0 (content row)
+  -- control labels on row 1 (content row)
   local ctrl_byte_offset = ctrl_pad_left
   for _, span in ipairs(ctrl_spans) do
-    pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 0, ctrl_byte_offset + span[1], {
-      end_row = 0, end_col = ctrl_byte_offset + span[2], hl_group = span[3],
+    pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, ctrl_byte_offset + span[1], {
+      end_row = 1, end_col = ctrl_byte_offset + span[2], hl_group = span[3],
     })
   end
   for _, span in ipairs(ctrl_key_spans) do
-    pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 0, ctrl_byte_offset + span[1], {
-      end_row = 0, end_col = ctrl_byte_offset + span[2], hl_group = "TurboDebugBarKey",
+    pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, ctrl_byte_offset + span[1], {
+      end_row = 1, end_col = ctrl_byte_offset + span[2], hl_group = "TurboDebugBarKey",
     })
   end
 
   local help_byte_start = #content_line - #help_text
-  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 0, help_byte_start, {
-    end_row = 0, end_col = #content_line, hl_group = "TurboDebugBarCtrl",
+  pcall(vim.api.nvim_buf_set_extmark, cbar_buf, bar_ns, 1, help_byte_start, {
+    end_row = 1, end_col = #content_line, hl_group = "TurboDebugBarCtrl",
   })
 
   cbar_zones = {}
@@ -439,12 +450,12 @@ local function render_cbar()
     local byte_end = ctrl_byte_offset + z[2]
     local dcol_start = vim.fn.strdisplaywidth(content_line:sub(1, byte_start))
     local dcol_end   = vim.fn.strdisplaywidth(content_line:sub(1, byte_end))
-    -- content is on buffer row 0 = window line 1
-    cbar_zones[#cbar_zones + 1] = { 1, dcol_start, dcol_end, z[3] }
+    -- content is on buffer row 1 = window line 2
+    cbar_zones[#cbar_zones + 1] = { 2, dcol_start, dcol_end, z[3] }
   end
   local help_dcol_start = vim.fn.strdisplaywidth(content_line:sub(1, help_byte_start))
   local help_dcol_end   = vim.fn.strdisplaywidth(content_line)
-  cbar_zones[#cbar_zones + 1] = { 1, help_dcol_start, help_dcol_end,
+  cbar_zones[#cbar_zones + 1] = { 2, help_dcol_start, help_dcol_end,
                                    function() require("turbo-debug.help").open() end }
 end
 
@@ -532,7 +543,7 @@ local function open_bars()
     sbar_win = vim.api.nvim_get_current_win()
     sbar_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_win_set_buf(sbar_win, sbar_buf)
-    vim.api.nvim_win_set_height(sbar_win, 2)
+    vim.api.nvim_win_set_height(sbar_win, 3)
     setup_bar_buf(sbar_buf)
     setup_bar_win(sbar_win)
     vim.wo[sbar_win].winfixheight = true
@@ -551,7 +562,7 @@ local function open_bars()
     cbar_win = vim.api.nvim_get_current_win()
     cbar_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_win_set_buf(cbar_win, cbar_buf)
-    vim.api.nvim_win_set_height(cbar_win, 2)
+    vim.api.nvim_win_set_height(cbar_win, 3)
     setup_bar_buf(cbar_buf)
     setup_bar_win(cbar_win)
     vim.wo[cbar_win].winfixheight = true
@@ -626,6 +637,25 @@ local function close_bars()
   sbar_zones, cbar_zones = {}, {}
 end
 
+-- nvim sometimes *squishes* a bar to 0 rows rather than closing it when
+-- grid pressure spikes (notably: bufferline's tabline flipping visible on
+-- buffer-count change reclaims one row from somewhere, and `winfixheight`
+-- is only a preference not a guarantee). The window object stays valid;
+-- the content just becomes invisible. Force each bar back to 3 rows any
+-- time we detect it shrunk below that.
+local function ensure_bar_heights()
+  if sbar_win and vim.api.nvim_win_is_valid(sbar_win) then
+    if vim.api.nvim_win_get_height(sbar_win) < 3 then
+      pcall(vim.api.nvim_win_set_height, sbar_win, 3)
+    end
+  end
+  if cbar_win and vim.api.nvim_win_is_valid(cbar_win) then
+    if vim.api.nvim_win_get_height(cbar_win) < 3 then
+      pcall(vim.api.nvim_win_set_height, cbar_win, 3)
+    end
+  end
+end
+
 local function reposition_bars()
   -- Just re-render bar content. We intentionally DON'T re-pin dapui
   -- sizes here — the user may have manually resized panes, and
@@ -659,6 +689,10 @@ local function set_dapui_window_opts(win)
     vim.wo[win].foldcolumn     = "0"
     -- make end-of-buffer `~` invisible by setting EOB fillchar to space
     vim.wo[win].fillchars      = "eob: "
+    -- Baseline winhighlight so WinBarNC:WinBar is in effect from the
+    -- first render (not just after the first WinEnter/WinLeave cycle).
+    -- setup_active_win_highlights overwrites on focus change.
+    vim.wo[win].winhighlight   = DAPUI_WINHL_INACTIVE
   end
 end
 
@@ -1139,9 +1173,9 @@ function M.enter()
       if active then M._install_for_buf(args.buf) end
     end,
   })
-  -- Editor resize: recreate any bar that got killed (shrink-below-min),
-  -- then re-render. dapui sizes are left alone so user manual resizes
-  -- stick.
+  -- Editor resize: recreate any bar that got killed, un-squish any that
+  -- got shrunk below 3 rows, then re-render. dapui sizes are left alone
+  -- so user manual resizes stick.
   vim.api.nvim_create_autocmd("VimResized", {
     group = group,
     callback = function()
@@ -1154,33 +1188,33 @@ function M.enter()
           cbar_win, cbar_buf = nil, nil
         end
         open_bars()
+        ensure_bar_heights()
         render_bars()
       end)
     end,
   })
   -- WinResized fires on any geometry change: mouse-drags on split
-  -- borders, bufferline's tabline appearing/disappearing (which shifts
-  -- and can even KILL a bar when the grid gets too tight), `wincmd =`,
-  -- etc. Cheap O(1) check for missing bars — only does work when one
-  -- actually got nuked. Always finishes with a redraw! to clear stale
+  -- borders, bufferline's tabline appearing/disappearing (which
+  -- reclaims a row and squishes `winfixheight` bars down), `wincmd =`,
+  -- etc. Cheap O(1): validate and un-squish only when something
+  -- actually shifted. Always finishes with redraw! to clear stale
   -- pixels from the shift.
   vim.api.nvim_create_autocmd("WinResized", {
     group = group,
     callback = function()
       if not active then return end
       vim.schedule(function()
-        local need_recover = not (sbar_win and vim.api.nvim_win_is_valid(sbar_win))
-                          or not (cbar_win and vim.api.nvim_win_is_valid(cbar_win))
-        if need_recover then
-          if not (sbar_win and vim.api.nvim_win_is_valid(sbar_win)) then
-            sbar_win, sbar_buf = nil, nil
-          end
-          if not (cbar_win and vim.api.nvim_win_is_valid(cbar_win)) then
-            cbar_win, cbar_buf = nil, nil
-          end
-          open_bars()
-          render_bars()
+        if not (sbar_win and vim.api.nvim_win_is_valid(sbar_win)) then
+          sbar_win, sbar_buf = nil, nil
         end
+        if not (cbar_win and vim.api.nvim_win_is_valid(cbar_win)) then
+          cbar_win, cbar_buf = nil, nil
+        end
+        if not (sbar_win and cbar_win) then
+          open_bars()
+        end
+        ensure_bar_heights()
+        render_bars()
         pcall(vim.cmd, "redraw!")
       end)
     end,
