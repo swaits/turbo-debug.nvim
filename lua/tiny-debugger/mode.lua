@@ -58,7 +58,13 @@ local function setup_default_actions()
     M.exit()
   end
   actions.restart = function() dap.restart() end
-  actions.help = function() help.open() end
+  actions.help = function()
+    if help.is_open() then
+      help.close()
+    else
+      help.open()
+    end
+  end
 
   actions.watch = function()
     local expr
