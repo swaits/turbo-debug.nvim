@@ -8,7 +8,9 @@ assert_eq(opts.keys.breakpoint, "x", "default modal breakpoint key")
 assert_eq(opts.global_keys.toggle, "<leader>dd", "default toggle key")
 assert_eq(opts.global_keys.breakpoint, "<leader>dx", "default global breakpoint key")
 assert_eq(opts.help_on_enter, true, "default help_on_enter")
-assert_eq(opts.quit_exits_mode, true, "default quit_exits_mode")
+assert_eq(opts.stop_on_entry_when_no_breakpoints, true, "default stop_on_entry_when_no_breakpoints")
+assert_eq(opts.max_value_width, 2000, "default max_value_width")
+assert_eq(opts.console_refresh_ms, 50, "default console_refresh_ms")
 
 -- partial key override
 opts = config.merge({ keys = { continue = "g" } })
@@ -24,9 +26,9 @@ opts = config.merge({ global_keys = { toggle = "<leader>D" } })
 assert_eq(opts.global_keys.toggle, "<leader>D", "overridden toggle key")
 assert_eq(opts.global_keys.breakpoint, "<leader>dx", "preserved breakpoint key")
 
--- quit_exits_mode override
-opts = config.merge({ quit_exits_mode = false })
-assert_eq(opts.quit_exits_mode, false, "overridden quit_exits_mode")
+-- max_value_width override
+opts = config.merge({ max_value_width = 0 })
+assert_eq(opts.max_value_width, 0, "overridden max_value_width")
 
 -- merge doesn't mutate defaults
 config.merge({ keys = { continue = "z" } })

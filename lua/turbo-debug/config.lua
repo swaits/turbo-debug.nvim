@@ -3,12 +3,22 @@ local M = {}
 M.defaults = {
   help_on_enter = true,
   builtin_adapters = true,
-  quit_exits_mode = true, -- q terminates AND exits debug mode (false = terminate only)
+
   -- When `c` is pressed with no breakpoints set, launch the first adapter
   -- configuration for the filetype with stopOnEntry so the debugger pauses
   -- at the program's entry point. Matches the Turbo Pascal "press key to
   -- start debugging" model. Set false to always run until a breakpoint.
   stop_on_entry_when_no_breakpoints = true,
+
+  -- Maximum per-line character width for variable values rendered in dapui
+  -- panes. Anything over this gets truncated with `…`. Set to 0 to disable.
+  -- Default 2000 only catches pathological multi-KB register/memory dumps;
+  -- normal values pass through and wrap naturally inside the pane.
+  max_value_width = 2000,
+
+  -- Throttle window (ms) for console repaints when the debugged program
+  -- outputs. Trailing-edge — max 1000/console_refresh_ms redraws per second.
+  console_refresh_ms = 50,
 
   -- modal keys (active only during debug mode, single-key)
   keys = {

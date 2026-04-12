@@ -72,8 +72,12 @@ During debug mode, single-key controls:
 | `d` | Step into | `D` | Clear all breakpoints |
 | `r` | Step out | `W` | Watch expression |
 | `C` | Run to cursor | `K` | Hover / inspect |
-| `q` | Terminate session | `E` | Eval in REPL |
+| `q` | Smart quit (terminate → exit) | `E` | Eval in REPL |
 | `R` | Restart session | `?` | Help popup |
+
+`q` is context-aware: if a session is running, it terminates the session
+and leaves you in debug mode (so you can read the console and inspect
+the exit state). If no session is running, `q` exits debug mode entirely.
 
 Press `?` during debug mode for a quick reference that also lists dap-ui's
 native in-pane bindings (`<CR>`, `e`, `o`, `d`, `r`, `t`).
@@ -86,23 +90,64 @@ Every key is user-overridable. Remap, disable, or add bindings via
 ```lua
 require("turbo-debug").setup({
   keys = {
-    step_over = "n",   -- remap a modal key
-    watch = false,     -- disable a modal key
+    step_over = "n",       -- remap a modal key
+    watch = false,         -- disable a modal key
   },
   global_keys = {
-    toggle = "<leader>D",   -- change the toggle chord
+    toggle = "<leader>D",  -- change the toggle chord
   },
-  sidebar = "right",        -- "left" (default) or "right"
-  help_on_enter = false,    -- disable the help splash
-  quit_exits_mode = false,  -- q terminates but stays in debug mode
+  sidebar = "right",       -- "left" (default) or "right"
+  help_on_enter = false,   -- disable the help splash
+
+  -- Auto stop-on-entry when no breakpoints are set (Turbo Pascal model):
+  -- press `c` on an empty-BP project and the debugger pauses at main().
+  -- Set false to always run until a breakpoint instead.
+  stop_on_entry_when_no_breakpoints = true,
+
+  -- Cap per-line value length in Scopes/Watches. Values longer than this
+  -- get truncated with `…`. Default 2000 only catches pathological register
+  -- dumps. Set 0 to disable truncation entirely.
+  max_value_width = 2000,
+
+  -- Console repaint throttle (ms). Max 1000/console_refresh_ms redraws per
+  -- second when the debugged program spams stdout. Prevents editor DOS.
+  console_refresh_ms = 50,
 })
 ```
 
-### Statusline integration
+### Control bar
 
-If you want a live debug indicator in your statusline, add
-`require("dap").status()` as a lualine/heirline component — it returns a
-progress message while debugging and an empty string when idle.
+When debug mode is active a 1-row floating bar appears directly above your
+statusline, showing:
+
+- `● READY` / `● RUNNING` / `● PAUSED` session state chip (color-coded)
+- Clickable controls:  continue `▶`,  step over,  step into,  step out,
+  restart,  terminate,  exit debug mode
+- `dap.status()` progress text (right-aligned)
+- Cursor position
+
+The bar is completely independent of lualine, heirline, or any other
+statusline plugin — it opens in its own floating window and closes cleanly
+when debug mode exits.
+
+### Design notes
+
+- **Rounded borders** are on every *floating* window this plugin opens:
+  the help popup (`?`), the hover popup (`K`), and the debug-eval popup
+  (`E`). Floating windows are the only windows Neovim draws borders around
+  in the terminal grid. Splits (the Scopes/Watches/Stacks/Breakpoints/
+  REPL/Console panes) use the user's `WinSeparator` character — that's a
+  terminal-rendering limit, not a plugin choice.
+
+- **No hardcoded colors.** Every highlight links to a standard group
+  (`DiagnosticError`, `Function`, `Comment`, `CursorLine`, `Visual`,
+  `Search`, `Title`, `Special`, etc.) so the plugin automatically inherits
+  your colorscheme on the fly. Switch themes mid-session and everything
+  re-paints.
+
+- **Nerd Font Codicons** for all functional iconography (gutter signs,
+  control buttons, pane titles). Emoji (`👈` / `👉`) for the paused-line
+  arrows, because fingers-pointing-at-the-line is unmissable.
 
 ## Supported Languages
 

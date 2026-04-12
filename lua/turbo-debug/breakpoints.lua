@@ -21,19 +21,21 @@ function M.setup()
   vim.api.nvim_set_hl(0, "DapStoppedLine", { default = true, link = "Search" })
   vim.api.nvim_set_hl(0, "DapLogPoint", { default = true, link = "DiagnosticInfo" })
 
-  -- gutter signs: Unicode geometric symbols via byte escapes so they survive
-  -- any tool-pipeline that strips PUA/Nerd-Font codepoints. They render in
-  -- any monospace font, Nerd Font required.
-  -- ● U+25CF (solid circle)       = breakpoint
-  -- ◆ U+25C6 (solid diamond)      = conditional breakpoint
-  -- ○ U+25CB (hollow circle)      = rejected breakpoint
-  -- ▶ U+25B6 (right triangle)     = current execution line (IP)
-  -- ✎ U+270E (pencil)             = log breakpoint
-  vim.fn.sign_define("DapBreakpoint",          { text = "\xe2\x97\x8f", texthl = "DapBreakpoint",          numhl = "DapBreakpoint" })
-  vim.fn.sign_define("DapBreakpointCondition", { text = "\xe2\x97\x86", texthl = "DapBreakpointCondition", numhl = "DapBreakpointCondition" })
-  vim.fn.sign_define("DapBreakpointRejected",  { text = "\xe2\x97\x8b", texthl = "DapBreakpointRejected",  numhl = "DapBreakpointRejected" })
-  vim.fn.sign_define("DapStopped",             { text = "\xe2\x96\xb6", texthl = "DapStopped", linehl = "DapStoppedLine", numhl = "DapStopped" })
-  vim.fn.sign_define("DapLogPoint",            { text = "\xe2\x9c\x8e", texthl = "DapLogPoint",            numhl = "DapLogPoint" })
+  -- Gutter signs: Nerd Font Codicons (byte-escaped for tool-pipeline safety).
+  -- The DapStopped IP sign is an emoji 👉 (backhand index pointing right,
+  -- U+1F449) that literally points AT the paused line from the left. Pairs
+  -- with the 👈 emoji in the EOL virtual text (mode.lua) — both fingers
+  -- point at the current line from opposite sides, unmistakable.
+  --
+  --   nf-cod-debug-breakpoint              = U+EA71 ""
+  --   nf-cod-debug-breakpoint-conditional  = U+EA9F ""
+  --   nf-cod-circle-slash                  = U+EABE ""
+  --   nf-cod-debug-breakpoint-log          = U+EBE4 ""
+  vim.fn.sign_define("DapBreakpoint",          { text = "\xee\xa9\xb1", texthl = "DapBreakpoint",          numhl = "DapBreakpoint" })
+  vim.fn.sign_define("DapBreakpointCondition", { text = "\xee\xaa\x9f", texthl = "DapBreakpointCondition", numhl = "DapBreakpointCondition" })
+  vim.fn.sign_define("DapBreakpointRejected",  { text = "\xee\xaa\xbe", texthl = "DapBreakpointRejected",  numhl = "DapBreakpointRejected" })
+  vim.fn.sign_define("DapStopped",             { text = "\xf0\x9f\x91\x89", texthl = "DapStopped", linehl = "DapStoppedLine", numhl = "DapStopped" })
+  vim.fn.sign_define("DapLogPoint",            { text = "\xee\xaf\xa4", texthl = "DapLogPoint",            numhl = "DapLogPoint" })
 
   -- unobtrusive inline virtual text: italic, comment-colored
   vim.api.nvim_set_hl(0, "NvimDapVirtualText", { default = true, link = "Comment", italic = true })
