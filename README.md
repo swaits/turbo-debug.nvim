@@ -7,7 +7,7 @@ breakpoints, watch expressions, and modal keybindings that just work.
 Inspired by Turbo Pascal — the first IDE where you could just hit a key
 and start debugging.
 
-![turbo-debug screenshot](https://github.com/user-attachments/assets/TODO)
+![turbo-debug screenshot](assets/screenshot.png)
 
 ## Install
 
