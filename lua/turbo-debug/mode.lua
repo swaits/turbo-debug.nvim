@@ -649,20 +649,28 @@ local function close_bars()
   sbar_zones, cbar_zones = {}, {}
 end
 
--- nvim sometimes *squishes* a bar to 0 rows rather than closing it when
--- grid pressure spikes (notably: bufferline's tabline flipping visible on
--- buffer-count change reclaims one row from somewhere, and `winfixheight`
--- is only a preference not a guarantee). The window object stays valid;
--- the content just becomes invisible. Force each bar back to 2 rows any
--- time we detect it shrunk below that.
+-- `winfixheight` is a preference, not a guarantee. Under grid pressure
+-- (bufferline tabline appearing/disappearing, `wincmd =`, etc.) nvim will
+-- shrink OR grow a bar against its fixed-height mark:
+--
+--   shrinking below 2 rows → bar content is clipped; first/second row
+--       invisible, the bar looks "squished".
+--   growing above 2 rows → the extra row sits past the end of the 2-line
+--       buffer and renders as a stray `~` EOB marker (between our sep
+--       and the next window).
+--
+-- Clamp EXACTLY to 2 on every resize event. When we shrink an oversized
+-- bar, the row nvim gave us has to go somewhere else; on WinResized the
+-- subsequent pin_dapui_sizes() call redistributes it across the dapui
+-- panes according to our initial proportions.
 local function ensure_bar_heights()
   if sbar_win and vim.api.nvim_win_is_valid(sbar_win) then
-    if vim.api.nvim_win_get_height(sbar_win) < 2 then
+    if vim.api.nvim_win_get_height(sbar_win) ~= 2 then
       pcall(vim.api.nvim_win_set_height, sbar_win, 2)
     end
   end
   if cbar_win and vim.api.nvim_win_is_valid(cbar_win) then
-    if vim.api.nvim_win_get_height(cbar_win) < 2 then
+    if vim.api.nvim_win_get_height(cbar_win) ~= 2 then
       pcall(vim.api.nvim_win_set_height, cbar_win, 2)
     end
   end
