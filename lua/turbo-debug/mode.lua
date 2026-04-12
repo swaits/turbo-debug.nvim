@@ -498,6 +498,15 @@ local function setup_bar_buf(buf)
 end
 
 local function setup_bar_win(win)
+  -- CRITICAL: clear winbar first. `:topleft split` / `:botright split`
+  -- inherits window-local options from the window we split off of. The
+  -- caller is the source window, which has `winbar = " %f"` set by
+  -- `set_debug_chrome`. Inherited onto the bar, that renders as an
+  -- extra chrome row ABOVE our own separator (since winbar sits above
+  -- the buffer rows), showing the scratch buffer's empty filename —
+  -- the phantom "second separator" the user sees stacked above the
+  -- legend bar. Explicit empty string disables the winbar entirely.
+  vim.wo[win].winbar = ""
   -- Include StatusLine/StatusLineNC so any statusline row the bar
   -- might pick up (with laststatus=2 every window gets one) blends
   -- into the bar's Normal bg instead of rendering in the dark default
