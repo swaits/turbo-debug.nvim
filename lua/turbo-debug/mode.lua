@@ -522,12 +522,12 @@ local function open_bars()
   render_bars()
 end
 
--- Pin dapui pane heights. Console gets its configured size. Sidebar
--- panes get explicit equal distribution with any rounding remainder
--- going to the LAST pane (Breakpoints) so it's never smaller than its
--- neighbors. winfixheight locks each pane against future rearrangements.
+-- Set dapui pane heights to their initial proportions. Called ONCE
+-- per M.enter, after dapui.open(). No winfixheight — the user is free
+-- to manually resize panes (bigger Breakpoints list, taller Console to
+-- tail long output, etc.) and their resize sticks because we don't
+-- fight subsequent WinResized events. Initial sizing only.
 local function pin_dapui_sizes()
-  -- gather one window per dapui pane filetype
   local pane_wins = {}
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_valid(buf) then
@@ -542,16 +542,14 @@ local function pin_dapui_sizes()
     end
   end
 
-  -- Console
+  -- Console to configured height
   if pane_wins.dapui_console then
     local target = config.opts.console_height
                    or math.max(8, math.floor(vim.o.lines * 0.2))
     pcall(vim.api.nvim_win_set_height, pane_wins.dapui_console, target)
   end
 
-  -- Sidebar: explicit equal distribution. Compute total current height
-  -- of the four sidebar panes and divide evenly, handing any remainder
-  -- to Breakpoints (last pane) so it's never smaller than the others.
+  -- Sidebar panes distributed equally (residual to Breakpoints)
   local order = { "dapui_stacks", "dapui_scopes", "dapui_watches", "dapui_breakpoints" }
   local present = {}
   local total = 0
@@ -570,11 +568,6 @@ local function pin_dapui_sizes()
       pcall(vim.api.nvim_win_set_height, w, h)
     end
   end
-
-  -- winfixheight on everything
-  for _, w in pairs(pane_wins) do
-    pcall(function() vim.wo[w].winfixheight = true end)
-  end
 end
 
 local function close_bars()
@@ -589,11 +582,11 @@ local function close_bars()
 end
 
 local function reposition_bars()
-  -- Splits auto-track VimResized via winfixheight; re-render the bar
-  -- content and re-pin dapui sizes so plugins like focus.nvim that
-  -- auto-resize on focus change can't permanently skew the layout.
+  -- Just re-render bar content. We intentionally DON'T re-pin dapui
+  -- sizes here — the user may have manually resized panes, and
+  -- fighting their resize on every event is a worse UX than occasional
+  -- layout drift.
   render_bars()
-  pin_dapui_sizes()
 end
 
 -- ─── dap-ui setup ────────────────────────────────────────────────────────────
@@ -1085,41 +1078,22 @@ function M.enter()
       if active then M._install_for_buf(args.buf) end
     end,
   })
-  -- On editor resize:
-  --   1) if any bar got killed by a shrink-below-minimum, recreate it
-  --   2) re-pin dapui pane sizes (defensive against any plugin — our
-  --      own, another's, or nvim's own shrink-recovery — that might
-  --      have skewed the layout).
-  -- Deferred via vim.schedule so we run AFTER other plugins' handlers.
+  -- On editor resize: if a bar got killed by shrink-below-minimum,
+  -- recreate it. Do NOT re-pin dapui sizes — whatever the user
+  -- (or nvim's shrink/expand redistribution) arrived at is respected.
   vim.api.nvim_create_autocmd("VimResized", {
     group = group,
     callback = function()
       vim.schedule(function()
         if not active then return end
-        -- recreate missing bars
         if not (sbar_win and vim.api.nvim_win_is_valid(sbar_win)) then
           sbar_win, sbar_buf = nil, nil
         end
         if not (cbar_win and vim.api.nvim_win_is_valid(cbar_win)) then
           cbar_win, cbar_buf = nil, nil
         end
-        open_bars()   -- idempotent; only creates what's missing
-        pin_dapui_sizes()
+        open_bars()      -- idempotent; only creates what's missing
         render_bars()
-      end)
-    end,
-  })
-  -- WinResized catches mouse-drag resizes and plugin-driven wincmd=
-  -- that don't fire VimResized. Guarded against self-recursion.
-  vim.api.nvim_create_autocmd("WinResized", {
-    group = group,
-    callback = function()
-      if M._pinning then return end
-      vim.schedule(function()
-        if not active then return end
-        M._pinning = true
-        pin_dapui_sizes()
-        M._pinning = false
       end)
     end,
   })
