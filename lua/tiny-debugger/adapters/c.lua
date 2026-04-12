@@ -2,17 +2,30 @@ local loader = require("tiny-debugger.adapters.init")
 
 local M = {}
 
-local function find_rust_binary()
-  vim.notify("cargo build ...", vim.log.levels.INFO)
+local function pick_executable(executables)
+  local co = coroutine.running()
+  if not co then
+    return executables[1]
+  end
+  vim.ui.select(executables, {
+    prompt = "Select executable",
+    format_item = function(path) return vim.fn.fnamemodify(path, ":t") end,
+  }, function(choice)
+    coroutine.resume(co, choice)
+  end)
+  return coroutine.yield()
+end
+
+local function cargo_build_and_pick()
+  vim.notify("cargo build ...")
   local output = vim.fn.system("cargo build --message-format=json")
   if vim.v.shell_error ~= 0 then
-    -- extract the human-readable error lines (non-json)
     local errors = {}
     for line in output:gmatch("[^\n]+") do
       if not line:match("^{") then errors[#errors + 1] = line end
     end
     vim.notify("cargo build failed:\n" .. table.concat(errors, "\n"), vim.log.levels.ERROR)
-    return vim.fn.input("Path to executable: ", vim.fn.getcwd() .. "/target/debug/", "file")
+    return nil
   end
 
   local executables = {}
@@ -23,20 +36,9 @@ local function find_rust_binary()
     end
   end
 
-  if #executables == 1 then
-    return executables[1]
-  elseif #executables > 1 then
-    local items = { "Select executable:" }
-    for i, e in ipairs(executables) do
-      items[i + 1] = i .. ". " .. vim.fn.fnamemodify(e, ":t")
-    end
-    local choice = vim.fn.inputlist(items)
-    if choice > 0 and choice <= #executables then
-      return executables[choice]
-    end
-  end
-
-  return vim.fn.input("Path to executable: ", vim.fn.getcwd() .. "/target/debug/", "file")
+  if #executables == 0 then return nil end
+  if #executables == 1 then return executables[1] end
+  return pick_executable(executables)
 end
 
 function M.register(dap)
@@ -56,7 +58,7 @@ function M.register(dap)
     dap.adapters.codelldb = adapter
   end
 
-  -- C/C++/Swift: prompt for executable path
+  -- C/C++/Swift: pick from compiled executables in cwd
   local prompt_config = {
     {
       type = "codelldb",
@@ -72,13 +74,13 @@ function M.register(dap)
     dap.configurations[ft] = dap.configurations[ft] or prompt_config
   end
 
-  -- Rust: cargo build + auto-find binary
+  -- Rust: cargo build + picker
   dap.configurations.rust = dap.configurations.rust or {
     {
       type = "codelldb",
       request = "launch",
       name = "Cargo build & launch",
-      program = find_rust_binary,
+      program = cargo_build_and_pick,
       cwd = "${workspaceFolder}",
     },
   }
