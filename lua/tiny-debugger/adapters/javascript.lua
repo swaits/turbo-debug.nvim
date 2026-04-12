@@ -8,7 +8,6 @@ function M.register(dap)
 
   local adapter = {
     type = "server",
-    host = "localhost",
     port = "${port}",
     executable = {
       command = js_debug,

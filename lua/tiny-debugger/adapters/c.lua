@@ -24,7 +24,6 @@ function M.register(dap)
         return vim.fn.input("Path to executable: ", vim.fn.getcwd() .. "/", "file")
       end,
       cwd = "${workspaceFolder}",
-      stopOnEntry = false,
     },
   }
 

@@ -1,16 +1,40 @@
 local config = require("tiny-debugger.config")
 local help = require("tiny-debugger.help")
-local ui = require("tiny-debugger.ui")
-local virtual_text = require("tiny-debugger.virtual_text")
 
 local M = {}
 
 local active = false
+local active_buf = nil
 local stashed_maps = {}
 
+-- one-time dap-ui and virtual-text initialization
+local dapui_initialized = false
+local vt_initialized = false
+
+local function ensure_dapui()
+  if dapui_initialized then return end
+  dapui_initialized = true
+  require("dapui").setup(config.opts.dapui)
+
+  local dap = require("dap")
+  dap.listeners.after.event_terminated["tiny-debugger"] = function()
+    if active then M.exit() end
+  end
+  dap.listeners.after.event_exited["tiny-debugger"] = function()
+    if active then M.exit() end
+  end
+end
+
+local function ensure_vt()
+  if vt_initialized then return end
+  vt_initialized = true
+  require("nvim-dap-virtual-text").setup(config.opts.virtual_text)
+end
+
+-- keymap stash/restore
+
 local function stash_mapping(buf, lhs)
-  local maps = vim.api.nvim_buf_get_keymap(buf, "n")
-  for _, map in ipairs(maps) do
+  for _, map in ipairs(vim.api.nvim_buf_get_keymap(buf, "n")) do
     if map.lhs == lhs then
       stashed_maps[lhs] = map
       return
@@ -37,35 +61,24 @@ local function restore_mapping(buf, lhs)
   end
 end
 
--- actions table: key name → function
--- populated by other modules via M.register_action
+-- actions (set up once)
+
 local actions = {}
+local visual_actions = { watch = true, hover = true }
 
-function M.register_action(name, fn)
-  actions[name] = fn
-end
-
--- default actions that map directly to dap calls
-local function setup_default_actions()
+local function setup_actions()
+  if next(actions) then return end
   local dap = require("dap")
   actions.continue = function() dap.continue() end
   actions.step_over = function() dap.step_over() end
   actions.step_into = function() dap.step_into() end
   actions.step_out = function() dap.step_out() end
   actions.run_to_cursor = function() dap.run_to_cursor() end
-  actions.terminate = function()
-    dap.terminate()
-    M.exit()
-  end
+  actions.terminate = function() dap.terminate(); M.exit() end
   actions.restart = function() dap.restart() end
   actions.help = function()
-    if help.is_open() then
-      help.close()
-    else
-      help.open()
-    end
+    if help.is_open() then help.close() else help.open() end
   end
-
   actions.watch = function()
     local expr
     if vim.fn.mode() == "v" or vim.fn.mode() == "V" then
@@ -78,18 +91,11 @@ local function setup_default_actions()
       require("dapui").elements.watches.add(expr)
     end
   end
-
-  actions.hover = function()
-    require("dapui").eval()
-  end
-
-  actions.eval = function()
-    require("dapui").float_element("repl")
-  end
+  actions.hover = function() require("dapui").eval() end
+  actions.eval = function() require("dapui").float_element("repl") end
 end
 
--- actions that also get visual mode mappings
-local visual_actions = { watch = true, hover = true }
+-- keymap lifecycle
 
 local function set_keymaps(buf)
   local keys = config.opts.keys
@@ -118,6 +124,8 @@ local function clear_keymaps(buf)
   stashed_maps = {}
 end
 
+-- cursor highlight
+
 local saved_cursor_hl = nil
 
 local function set_cursor_highlight()
@@ -126,25 +134,26 @@ local function set_cursor_highlight()
 end
 
 local function restore_cursor_highlight()
-  if saved_cursor_hl then
-    vim.api.nvim_set_hl(0, "Cursor", saved_cursor_hl)
-    saved_cursor_hl = nil
-  else
-    vim.api.nvim_set_hl(0, "Cursor", {})
-  end
+  vim.api.nvim_set_hl(0, "Cursor", saved_cursor_hl or {})
+  saved_cursor_hl = nil
 end
+
+-- public API
 
 function M.enter()
   if active then return end
   active = true
+  setup_actions()
 
-  setup_default_actions()
-
-  local buf = vim.api.nvim_get_current_buf()
-  set_keymaps(buf)
+  active_buf = vim.api.nvim_get_current_buf()
+  set_keymaps(active_buf)
   set_cursor_highlight()
-  ui.open()
-  virtual_text.enable()
+
+  ensure_dapui()
+  require("dapui").open()
+
+  ensure_vt()
+  require("nvim-dap-virtual-text").enable()
 
   if config.opts.help_on_enter then
     help.open()
@@ -155,20 +164,17 @@ function M.exit()
   if not active then return end
   active = false
 
-  local buf = vim.api.nvim_get_current_buf()
-  clear_keymaps(buf)
+  clear_keymaps(active_buf or vim.api.nvim_get_current_buf())
+  active_buf = nil
   restore_cursor_highlight()
   help.close()
-  ui.close()
-  virtual_text.disable()
+
+  if dapui_initialized then require("dapui").close() end
+  if vt_initialized then require("nvim-dap-virtual-text").disable() end
 end
 
 function M.toggle()
-  if active then
-    M.exit()
-  else
-    M.enter()
-  end
+  if active then M.exit() else M.enter() end
 end
 
 function M.is_active()

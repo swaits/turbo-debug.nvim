@@ -54,16 +54,13 @@ M.defaults = {
   adapters = {},
 }
 
-M.opts = vim.deepcopy(M.defaults)
+M.opts = M.defaults
 
 function M.merge(user_opts)
   M.opts = vim.tbl_deep_extend("force", vim.deepcopy(M.defaults), user_opts or {})
-  -- preserve false values for disabled keys (tbl_deep_extend drops them)
   if user_opts and user_opts.keys then
     for k, v in pairs(user_opts.keys) do
-      if v == false then
-        M.opts.keys[k] = false
-      end
+      if v == false then M.opts.keys[k] = false end
     end
   end
   return M.opts

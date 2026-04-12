@@ -12,37 +12,32 @@ function M.setup()
     load_breakpoints_event = { "BufReadPost" },
   })
 
-  -- sign highlights
-  vim.api.nvim_set_hl(0, "DapBreakpoint", { fg = "#e06c75" })
-  vim.api.nvim_set_hl(0, "DapBreakpointCondition", { fg = "#e5c07b" })
-  vim.api.nvim_set_hl(0, "DapBreakpointRejected", { fg = "#5c6370" })
-  vim.api.nvim_set_hl(0, "DapStopped", { fg = "#98c379" })
-  vim.api.nvim_set_hl(0, "DapStoppedLine", { bg = "#2e3b2e" })
-  vim.api.nvim_set_hl(0, "DapLogPoint", { fg = "#61afef" })
+  -- sign highlights (default = true so colorschemes can override)
+  vim.api.nvim_set_hl(0, "DapBreakpoint", { default = true, fg = "#e06c75" })
+  vim.api.nvim_set_hl(0, "DapBreakpointCondition", { default = true, fg = "#e5c07b" })
+  vim.api.nvim_set_hl(0, "DapBreakpointRejected", { default = true, fg = "#5c6370" })
+  vim.api.nvim_set_hl(0, "DapStopped", { default = true, fg = "#98c379" })
+  vim.api.nvim_set_hl(0, "DapStoppedLine", { default = true, bg = "#2e3b2e" })
+  vim.api.nvim_set_hl(0, "DapLogPoint", { default = true, fg = "#61afef" })
 
-  -- gutter signs
   vim.fn.sign_define("DapBreakpoint", { text = "🔴", texthl = "DapBreakpoint" })
   vim.fn.sign_define("DapBreakpointCondition", { text = "🟡", texthl = "DapBreakpointCondition" })
   vim.fn.sign_define("DapBreakpointRejected", { text = "⭕", texthl = "DapBreakpointRejected" })
   vim.fn.sign_define("DapStopped", { text = "▶️", texthl = "DapStopped", linehl = "DapStoppedLine" })
   vim.fn.sign_define("DapLogPoint", { text = "📝", texthl = "DapLogPoint" })
 
-  -- global mappings — these work outside debug mode
+  -- global mappings (work outside debug mode)
   local keys = config.opts.keys
-  if keys.breakpoint then
-    vim.keymap.set("n", keys.breakpoint, function()
-      require("persistent-breakpoints.api").toggle_breakpoint()
-    end, { silent = true, desc = "tiny-debugger: toggle breakpoint" })
-  end
-  if keys.cond_breakpoint then
-    vim.keymap.set("n", keys.cond_breakpoint, function()
-      require("persistent-breakpoints.api").set_conditional_breakpoint()
-    end, { silent = true, desc = "tiny-debugger: conditional breakpoint" })
-  end
-  if keys.clear_breakpoints then
-    vim.keymap.set("n", keys.clear_breakpoints, function()
-      require("persistent-breakpoints.api").clear_all_breakpoints()
-    end, { silent = true, desc = "tiny-debugger: clear all breakpoints" })
+  local pb = require("persistent-breakpoints.api")
+  local bindings = {
+    { keys.breakpoint, pb.toggle_breakpoint, "toggle breakpoint" },
+    { keys.cond_breakpoint, pb.set_conditional_breakpoint, "conditional breakpoint" },
+    { keys.clear_breakpoints, pb.clear_all_breakpoints, "clear all breakpoints" },
+  }
+  for _, b in ipairs(bindings) do
+    if b[1] then
+      vim.keymap.set("n", b[1], b[2], { silent = true, desc = "tiny-debugger: " .. b[3] })
+    end
   end
 end
 

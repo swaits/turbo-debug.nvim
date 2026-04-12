@@ -5,50 +5,37 @@ local M = {}
 local win_id = nil
 local buf_id = nil
 
-local key_labels = {
-  continue = "Continue",
-  step_over = "Step over",
-  step_into = "Step into",
-  step_out = "Step out",
-  run_to_cursor = "Run to cursor",
-  breakpoint = "Toggle breakpoint",
-  cond_breakpoint = "Conditional breakpoint",
-  clear_breakpoints = "Clear all breakpoints",
-  watch = "Watch expression",
-  hover = "Hover / inspect",
-  eval = "Eval in REPL",
-  terminate = "Quit debugging",
-  restart = "Restart session",
-  help = "Show this help",
+local key_info = {
+  { "continue", "Continue" },
+  { "step_over", "Step over" },
+  { "step_into", "Step into" },
+  { "step_out", "Step out" },
+  { "run_to_cursor", "Run to cursor" },
+  { "breakpoint", "Toggle breakpoint" },
+  { "cond_breakpoint", "Conditional breakpoint" },
+  { "clear_breakpoints", "Clear all breakpoints" },
+  { "watch", "Watch expression" },
+  { "hover", "Hover / inspect" },
+  { "eval", "Eval in REPL" },
+  { "terminate", "Quit debugging" },
+  { "restart", "Restart session" },
+  { "help", "Show this help" },
 }
 
--- ordered list of key names for consistent display
-local key_order = {
-  "continue", "step_over", "step_into", "step_out", "run_to_cursor",
-  "breakpoint", "cond_breakpoint", "clear_breakpoints", "watch", "hover", "eval",
-  "terminate", "restart", "help",
-}
-
-local function build_lines()
+local function build_content()
   local lines = { " tiny-debugger keybindings", "" }
+  local width = #lines[1]
   local keys = config.opts.keys
-  for _, name in ipairs(key_order) do
-    local key = keys[name]
+  for _, pair in ipairs(key_info) do
+    local key = keys[pair[1]]
     if key then
-      local label = key_labels[name] or name
-      table.insert(lines, string.format("  %s  %s", key, label))
+      local line = string.format("  %s  %s", key, pair[2])
+      lines[#lines + 1] = line
+      if #line > width then width = #line end
     end
   end
-  table.insert(lines, "")
-  return lines
-end
-
-local function calc_width(lines)
-  local max = 0
-  for _, line in ipairs(lines) do
-    max = math.max(max, #line)
-  end
-  return max + 2
+  lines[#lines + 1] = ""
+  return lines, width + 2
 end
 
 function M.close()
@@ -65,37 +52,29 @@ end
 function M.open()
   M.close()
 
-  local lines = build_lines()
-  local width = calc_width(lines)
-  local height = #lines
+  local lines, width = build_content()
 
   buf_id = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf_id, 0, -1, false, lines)
   vim.bo[buf_id].modifiable = false
   vim.bo[buf_id].bufhidden = "wipe"
 
-  local editor_width = vim.o.columns
-  local editor_height = vim.o.lines
-
   win_id = vim.api.nvim_open_win(buf_id, false, {
     relative = "editor",
     anchor = "SE",
-    row = editor_height - 2,
-    col = editor_width,
+    row = vim.o.lines - 2,
+    col = vim.o.columns,
     width = width,
-    height = height,
+    height = #lines,
     style = "minimal",
     border = "rounded",
     focusable = false,
     noautocmd = true,
   })
 
-  -- auto-close on next keypress
   vim.api.nvim_create_autocmd({ "CursorMoved", "InsertEnter", "CmdlineEnter" }, {
     once = true,
-    callback = function()
-      M.close()
-    end,
+    callback = function() M.close() end,
   })
 end
 

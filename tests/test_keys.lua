@@ -1,15 +1,8 @@
--- tests for keybinding stash/restore
+local assert_eq = require("helpers").assert_eq
 local td = require("tiny-debugger")
 
-local function assert_eq(a, b, msg)
-  if a ~= b then
-    error(string.format("FAIL: %s — expected %s, got %s", msg, vim.inspect(b), vim.inspect(a)))
-  end
-end
-
 -- set a custom mapping for 'c'
-local custom_called = false
-vim.keymap.set("n", "c", function() custom_called = true end, { buffer = 0, desc = "custom c" })
+vim.keymap.set("n", "c", function() end, { buffer = 0, desc = "custom c" })
 
 -- verify custom mapping exists
 local maparg = vim.fn.maparg("c", "n", false, true)
