@@ -568,6 +568,35 @@ local function has_any_breakpoint()
   return false
 end
 
+-- Find a source window (non-dapui, non-repl, non-bar). nvim-dap reads the
+-- current buffer's filetype to pick a launch configuration, so when the user
+-- presses `c` while focused in a dapui pane (filetype=dapui_scopes, etc.),
+-- we need to temporarily borrow a source window's context.
+local function source_window()
+  -- prefer the current window if it's a source
+  local cur = vim.api.nvim_get_current_win()
+  local function is_source(w)
+    if not vim.api.nvim_win_is_valid(w) then return false end
+    if vim.api.nvim_win_get_config(w).relative ~= "" then return false end
+    local ft = vim.bo[vim.api.nvim_win_get_buf(w)].filetype or ""
+    return ft ~= ""
+      and not ft:match("^dapui_")
+      and ft ~= "dap-repl"
+      and ft ~= "TurboDebugBar"
+  end
+  if is_source(cur) then return cur end
+  for _, w in ipairs(vim.api.nvim_list_wins()) do
+    if is_source(w) then return w end
+  end
+  return nil
+end
+
+local function run_in_source(fn)
+  local w = source_window()
+  if w then return vim.api.nvim_win_call(w, fn) end
+  return fn()
+end
+
 local function launch_with_stop_on_entry()
   local dap = require("dap")
   local ft = vim.bo.filetype or ""
@@ -585,11 +614,13 @@ end
 local function smart_continue()
   local dap = require("dap")
   if dap.session() then dap.continue(); return end
-  if config.opts.stop_on_entry_when_no_breakpoints ~= false and not has_any_breakpoint() then
-    launch_with_stop_on_entry()
-  else
-    dap.continue()
-  end
+  run_in_source(function()
+    if config.opts.stop_on_entry_when_no_breakpoints ~= false and not has_any_breakpoint() then
+      launch_with_stop_on_entry()
+    else
+      dap.continue()
+    end
+  end)
 end
 
 local function step_or_launch(step_fn)
