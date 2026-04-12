@@ -21,18 +21,19 @@ local vt_initialized = false
 -- file stays ASCII through any tool pipeline that strips PUA codepoints.
 
 local ICON = {
-  -- Control-bar buttons: Nerd Font Codicons. Monochrome, but render
-  -- *consistently* across the whole bar — the VS16-dependent emoji family
-  -- (▶️ ⬇️ ⬆️) falls back to text-style in many terminals while
-  -- supplementary-plane emoji (🔴 🐛) render as colored glyphs, producing
-  -- the "some icons are blocks, some are characters" inconsistency. The
-  -- Codicon family all ships in the same Nerd Font glyph range.
-  play       = "\xee\xab\x98",                  --  U+EAD8 debug-start
-  step_over  = "\xee\xab\x96",                  --  U+EAD6 debug-step-over
-  step_into  = "\xee\xab\x95",                  --  U+EAD5 debug-step-into
-  step_out   = "\xee\xab\x94",                  --  U+EAD4 debug-step-out
-  restart    = "\xee\xad\x84",                  --  U+EB44 debug-restart
-  stop       = "\xee\xab\x97",                  --  U+EAD7 debug-stop
+  -- Control-bar emoji — strictly supplementary-plane (U+1F000+) or
+  -- standalone-emoji-default (like 🛑) codepoints. No VS16-dependent
+  -- glyphs: those render as text-mode in half of modern terminals, which
+  -- is exactly the "some icons are blocks, some are chars" inconsistency
+  -- the last iteration had. Every icon here is guaranteed to render as a
+  -- colored emoji in Ghostty + any modern terminal with emoji support.
+  go         = "\xf0\x9f\x9f\xa2",              -- 🟢 green circle (U+1F7E2) — go / continue / running
+  start_rkt  = "\xf0\x9f\x9a\x80",              -- 🚀 rocket (U+1F680) — launch a new session
+  step_over  = "\xf0\x9f\x91\xa3",              -- 👣 footprints (U+1F463) — step
+  step_into  = "\xf0\x9f\x94\xbd",              -- 🔽 down-pointing red triangle (U+1F53D) — into
+  step_out   = "\xf0\x9f\x94\xbc",              -- 🔼 up-pointing red triangle (U+1F53C) — out
+  restart    = "\xe2\x99\xbb\xef\xb8\x8f",      -- ♻️ recycle (U+267B + VS16) — user's pick
+  stop       = "\xf0\x9f\x9b\x91",              -- 🛑 octagonal stop sign (U+1F6D1)
 
   -- pane-title emoji (supplementary plane — reliably colorful)
   scopes      = "\xf0\x9f\x94\x8e",             -- 🔎 magnifier (U+1F50E)
@@ -44,7 +45,7 @@ local ICON = {
 
   -- brand / state emoji
   bug         = "\xf0\x9f\x90\x9b",             -- 🐛 bug (U+1F41B)
-  help        = "\xe2\x9d\x93",                 -- ❓ (U+2753) black question mark
+  help        = "\xf0\x9f\x92\xa1",             -- 💡 lightbulb (U+1F4A1) — insight/help
 
   -- IP arrows
   ip_left     = "\xf0\x9f\x91\x88",             -- 👈 backhand pointing left (U+1F448)
@@ -217,14 +218,31 @@ local function render_bar()
   if not status_ok then status_msg = "" end
   local status_text = (status_msg ~= "" and ("  " .. status_msg) or "")
 
-  -- ─── CENTER ZONE ─── control labels, each clickable
+  -- ─── CENTER ZONE ─── control labels, each clickable. Two labels have
+  -- modal variants that track the dap state so the text reflects what the
+  -- key will ACTUALLY do right now:
+  --   (c) start    when no session is running
+  --   (c)ontinue   when a session is paused or running
+  --   (q)uit       when no session is running (exits debug mode)
+  --   (q) terminate when a session is running (kills the process)
+  local has_session = state ~= "READY"
+  local continue_icon, continue_tail
+  if has_session then
+    continue_icon = ICON.go
+    continue_tail = "ontinue"
+  else
+    continue_icon = ICON.start_rkt
+    continue_tail = " start"
+  end
+  local quit_tail = has_session and " terminate" or "uit"
+
   local controls = {
-    { icon = ICON.play,      key = keyof("continue",  "c"), tail = "ontinue", fn = action("continue")  },
-    { icon = ICON.step_over, key = keyof("step_over", "s"), tail = "tep",     fn = action("step_over") },
-    { icon = ICON.step_into, key = keyof("step_into", "d"), tail = "escend",  fn = action("step_into") },
-    { icon = ICON.step_out,  key = keyof("step_out",  "r"), tail = "eturn",   fn = action("step_out")  },
-    { icon = ICON.restart,   key = keyof("restart",   "R"), tail = "estart",  fn = action("restart")   },
-    { icon = ICON.stop,      key = keyof("terminate", "q"), tail = "uit",     fn = action("terminate") },
+    { icon = continue_icon,  key = keyof("continue",  "c"), tail = continue_tail, fn = action("continue")  },
+    { icon = ICON.step_over, key = keyof("step_over", "s"), tail = "tep",         fn = action("step_over") },
+    { icon = ICON.step_into, key = keyof("step_into", "d"), tail = "escend",      fn = action("step_into") },
+    { icon = ICON.step_out,  key = keyof("step_out",  "r"), tail = "eturn",       fn = action("step_out")  },
+    { icon = ICON.restart,   key = keyof("restart",   "R"), tail = "estart",      fn = action("restart")   },
+    { icon = ICON.stop,      key = keyof("terminate", "q"), tail = quit_tail,     fn = action("terminate") },
   }
 
   -- ─── RIGHT ZONE ─── help (no "(?)" — the ❓ emoji is self-documenting)
@@ -409,6 +427,9 @@ local function open_bar()
   end
   bar_buf = vim.api.nvim_create_buf(false, true)
   vim.bo[bar_buf].bufhidden = "wipe"
+  vim.bo[bar_buf].buftype = "nofile"
+  vim.bo[bar_buf].swapfile = false
+  vim.bo[bar_buf].buflisted = false
   vim.bo[bar_buf].filetype = "TurboDebugBar"
   bar_win = vim.api.nvim_open_win(bar_buf, false, bar_position())
   vim.wo[bar_win].winhighlight = "Normal:TurboDebugBar,EndOfBuffer:TurboDebugBar"
@@ -421,9 +442,24 @@ local function open_bar()
   vim.wo[bar_win].statuscolumn = ""
   vim.wo[bar_win].wrap = false
 
-  -- click dispatch (both mouse button and drag — drag counts as click on bar_buf)
+  -- click dispatch
   vim.keymap.set("n", "<LeftMouse>", handle_bar_click, { buffer = bar_buf, silent = true, nowait = true })
   vim.keymap.set("n", "<LeftRelease>", "<Nop>", { buffer = bar_buf, silent = true, nowait = true })
+
+  -- Safety net: if the user somehow lands in the bar buffer (mouse drag into
+  -- it, or some focus accident), bounce them back out immediately. Stops
+  -- them from hitting E21 "Cannot make changes, 'modifiable' is off" when
+  -- they try to type in a non-modifiable buffer.
+  vim.api.nvim_create_autocmd("BufEnter", {
+    buffer = bar_buf,
+    callback = function()
+      vim.schedule(function()
+        if vim.api.nvim_get_current_buf() == bar_buf then
+          pcall(vim.cmd, "wincmd p")
+        end
+      end)
+    end,
+  })
 
   render_bar()
 end
@@ -450,13 +486,24 @@ local function set_dapui_window_opts(win)
   -- adjacent windows. breakindent + showbreak make continuation lines visually
   -- attached to their parent. The `format_value` wrap below truncates only
   -- pathologically-long values.
+  --
+  -- Also kill line numbers, the statuscolumn (which snacks overrides with a
+  -- rendered gutter), and the `~` end-of-buffer markers — these are pure
+  -- noise in debug-info panes where there's no file to navigate.
   if vim.api.nvim_win_is_valid(win) then
-    vim.wo[win].wrap          = true
-    vim.wo[win].breakindent   = true
-    vim.wo[win].linebreak     = true
-    vim.wo[win].showbreak     = " " .. ICON.wrap_mark .. " "
-    vim.wo[win].sidescrolloff = 0
-    vim.wo[win].cursorline    = true
+    vim.wo[win].wrap           = true
+    vim.wo[win].breakindent    = true
+    vim.wo[win].linebreak      = true
+    vim.wo[win].showbreak      = " " .. ICON.wrap_mark .. " "
+    vim.wo[win].sidescrolloff  = 0
+    vim.wo[win].cursorline     = true
+    vim.wo[win].number         = false
+    vim.wo[win].relativenumber = false
+    vim.wo[win].signcolumn     = "no"
+    vim.wo[win].statuscolumn   = ""
+    vim.wo[win].foldcolumn     = "0"
+    -- make end-of-buffer `~` invisible by setting EOB fillchar to space
+    vim.wo[win].fillchars      = "eob: "
   end
 end
 
@@ -650,8 +697,16 @@ local function source_window()
 end
 
 local function run_in_source(fn)
+  -- We can't use nvim_win_call here: dap.continue() may open a vim.ui.select
+  -- picker asynchronously, and by the time the picker opens, nvim_win_call
+  -- has already returned focus to the original window — the picker opens
+  -- but nothing has focus on it, forcing the user to click in to interact.
+  -- Actually shift focus to the source window so the picker takes focus
+  -- properly.
   local w = source_window()
-  if w then return vim.api.nvim_win_call(w, fn) end
+  if w and w ~= vim.api.nvim_get_current_win() then
+    pcall(vim.api.nvim_set_current_win, w)
+  end
   return fn()
 end
 
