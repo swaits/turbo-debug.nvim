@@ -32,7 +32,12 @@ local ICON = {
   step_over  = "\xf0\x9f\x91\xa3",              -- 👣 footprints (U+1F463) — step
   step_into  = "\xf0\x9f\x94\xbd",              -- 🔽 down-pointing red triangle (U+1F53D) — into
   step_out   = "\xf0\x9f\x94\xbc",              -- 🔼 up-pointing red triangle (U+1F53C) — out
-  restart    = "\xe2\x99\xbb\xef\xb8\x8f",      -- ♻️ recycle (U+267B + VS16) — user's pick
+  restart    = "\xf0\x9f\x94\x84",              -- 🔄 counterclockwise arrows (U+1F504). ♻️
+                                                -- (U+267B + VS16) doesn't render in the
+                                                -- user's font — VS16 forces emoji only
+                                                -- when the font has an emoji glyph, and
+                                                -- many don't. Supplementary plane is
+                                                -- guaranteed color.
   stop       = "\xf0\x9f\x9b\x91",              -- 🛑 octagonal stop sign (U+1F6D1)
 
   -- pane-title emoji (supplementary plane — reliably colorful)
@@ -369,14 +374,16 @@ local function render_bar()
     end
   end
 
-  -- right zone (help) highlight + click
+  -- right zone (help) — single-group highlight across the whole label.
+  -- No special key-hint styling here: the earlier attempt put a misaligned
+  -- TurboDebugBarKey (bold+underline) extmark starting 1 byte INTO the
+  -- emoji's 4 UTF-8 bytes, so when the emoji didn't render at all the
+  -- underline showed up as "_____" after "terminate". Just use the
+  -- standard control highlight on the whole help region — emoji speaks
+  -- for itself.
   local right_byte_start = #line - #right_text
   pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, right_byte_start, {
     end_row = 1, end_col = #line, hl_group = "TurboDebugBarCtrl",
-  })
-  -- emphasize the ❓ itself with the key-hint color
-  pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, right_byte_start + 1, {
-    end_row = 1, end_col = right_byte_start + 1 + #ICON.help, hl_group = "TurboDebugBarKey",
   })
   local help_dcol_start = vim.fn.strdisplaywidth(line:sub(1, right_byte_start))
   local help_dcol_end   = vim.fn.strdisplaywidth(line)
@@ -621,14 +628,16 @@ local function ensure_dapui()
   dap.listeners.before.event_terminated["turbo-debug-ip"] = function() clear_ip() end
   dap.listeners.before.event_exited["turbo-debug-ip"]     = function() clear_ip() end
 
-  -- winbar titles on dapui panes — colorful emoji for instant pane recognition
+  -- winbar titles on dapui panes — colorful emoji for instant pane
+  -- recognition. REPL is iconless per user preference (its prompt is
+  -- already visually distinct enough).
   local titles = {
     dapui_scopes      = " " .. ICON.scopes      .. "  Scopes",
     dapui_watches     = " " .. ICON.watches     .. "  Watches",
     dapui_stacks      = " " .. ICON.stacks      .. "  Call Stack",
     dapui_breakpoints = " " .. ICON.breakpoints .. "  Breakpoints",
     dapui_console     = " " .. ICON.terminal    .. "  Console",
-    ["dap-repl"]      = " " .. ICON.repl        .. "  REPL",
+    ["dap-repl"]      = " REPL",
   }
   vim.api.nvim_create_autocmd("FileType", {
     pattern = { "dapui_*", "dap-repl" },
