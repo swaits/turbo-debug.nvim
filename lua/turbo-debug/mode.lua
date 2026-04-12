@@ -472,8 +472,10 @@ end
 
 local function open_bars()
   -- Both bars are SPLITS, not floats. Splits consume real layout rows
-  -- so dapui and source windows tuck underneath them rather than
-  -- getting overlaid. The caller's original focus is preserved.
+  -- so dapui windows tuck between them. `wincmd K` / `wincmd J` is
+  -- applied after creation to ensure the bars span the FULL editor
+  -- width (across the sidebar column too) — otherwise dapui's later
+  -- vertical splits would constrain the bars to just the main column.
   local caller_win = vim.api.nvim_get_current_win()
 
   -- status bar (top)
@@ -491,7 +493,6 @@ local function open_bars()
     bounce_out(sbar_buf)
   end
 
-  -- back to caller before creating bottom so topology is predictable
   if vim.api.nvim_win_is_valid(caller_win) then
     pcall(vim.api.nvim_set_current_win, caller_win)
   end
@@ -511,11 +512,33 @@ local function open_bars()
     bounce_out(cbar_buf)
   end
 
-  -- restore caller focus
   if vim.api.nvim_win_is_valid(caller_win) then
     pcall(vim.api.nvim_set_current_win, caller_win)
   end
 
+  render_bars()
+end
+
+-- After dapui has created its vertical splits (sidebar etc.), the bars
+-- may be constrained to the non-sidebar column. `wincmd K` / `wincmd J`
+-- re-layout the window tree with the bar window spanning full editor
+-- width at the top / bottom respectively, pushing everything else into
+-- the middle rows.
+local function force_bars_full_width()
+  local caller_win = vim.api.nvim_get_current_win()
+  if sbar_win and vim.api.nvim_win_is_valid(sbar_win) then
+    pcall(vim.api.nvim_set_current_win, sbar_win)
+    pcall(vim.cmd, "wincmd K")
+    pcall(vim.api.nvim_win_set_height, sbar_win, 2)
+  end
+  if cbar_win and vim.api.nvim_win_is_valid(cbar_win) then
+    pcall(vim.api.nvim_set_current_win, cbar_win)
+    pcall(vim.cmd, "wincmd J")
+    pcall(vim.api.nvim_win_set_height, cbar_win, 2)
+  end
+  if vim.api.nvim_win_is_valid(caller_win) then
+    pcall(vim.api.nvim_set_current_win, caller_win)
+  end
   render_bars()
 end
 
@@ -595,26 +618,20 @@ local function schedule_console_redraw()
   end, config.opts.console_refresh_ms or 50)
 end
 
--- Call dapui.setup each M.enter() so the layout is recomputed against
--- current terminal dimensions AND against whatever splits our bars have
--- pinned at top and bottom. Otherwise dapui caches first-call sizes and
--- re-entering debug mode lays out against stale dimensions (Console
--- ballooning, sidebar proportions drifting away from 25% each — the
--- exact bug the user reported on second toggle).
-local function refresh_dapui_layouts()
+local function ensure_dapui()
+  -- One-time setup. Calling dapui.setup on every enter was tearing down
+  -- internal state (windows, event listeners, buffer refs) while the
+  -- adapter handshake was in flight — "Debug adapter didn't respond"
+  -- timeouts and overall slowness. dapui's layouts use the absolute
+  -- sizes computed once here; if the terminal resizes significantly
+  -- between toggles, proportions can drift slightly, but that's
+  -- acceptable compared to breaking the adapter.
+  if dapui_initialized then return end
+  dapui_initialized = true
   local dapui_opts = vim.deepcopy(config.opts.dapui)
   if not dapui_opts.layouts then dapui_opts.layouts = build_default_layouts() end
   require("dapui").setup(dapui_opts)
   patch_format_value()
-end
-
-local function ensure_dapui()
-  if dapui_initialized then
-    refresh_dapui_layouts()
-    return
-  end
-  dapui_initialized = true
-  refresh_dapui_layouts()
 
   local dap = require("dap")
   dap.listeners.after.event_initialized["turbo-debug"] = function()
@@ -698,22 +715,42 @@ local function ensure_dapui()
   dap.listeners.before.event_terminated["turbo-debug-ip"] = function() clear_ip() end
   dap.listeners.before.event_exited["turbo-debug-ip"]     = function() clear_ip() end
 
-  -- Clear the Console pane on session start/restart. Runs BEFORE the
-  -- adapter emits output so the new session's log starts clean.
+  -- Clear the Console pane on session start/restart.
+  -- Strategy: delete the old console buffer and let dapui's own get_buf()
+  -- create a fresh one on next reference. Editing a terminal buffer in
+  -- place via nvim_buf_set_lines was breaking the terminal state and
+  -- making the Console window unresponsive. Swapping buffers is clean.
+  -- We also find any window still showing the old buffer and rehook it
+  -- to the new one so the user actually sees output in the pane.
   local function clear_console()
     if not config.opts.clear_console_on_start then return end
     local ok, dapui = pcall(require, "dapui")
-    if not ok then return end
-    local buf_ok, buf = pcall(function() return dapui.elements.console.buffer() end)
-    if not buf_ok or not buf or not vim.api.nvim_buf_is_valid(buf) then return end
-    pcall(function()
-      local prev = vim.bo[buf].modifiable
-      vim.bo[buf].modifiable = true
-      vim.api.nvim_buf_set_lines(buf, 0, -1, false, {})
-      vim.bo[buf].modifiable = prev
-    end)
+    if not (ok and dapui and dapui.elements and dapui.elements.console) then return end
+    local old_ok, old_buf = pcall(dapui.elements.console.buffer)
+    if not old_ok or not old_buf or not vim.api.nvim_buf_is_valid(old_buf) then return end
+
+    -- remember every window currently showing the old buffer
+    local wins = vim.fn.win_findbuf(old_buf)
+
+    -- delete old buffer — dapui's cached ref becomes invalid and the
+    -- next `console.buffer()` call creates a fresh buffer
+    pcall(vim.api.nvim_buf_delete, old_buf, { force = true })
+
+    local new_ok, new_buf = pcall(dapui.elements.console.buffer)
+    if not new_ok or not new_buf or not vim.api.nvim_buf_is_valid(new_buf) then return end
+
+    -- rehook the windows
+    for _, win in ipairs(wins) do
+      if vim.api.nvim_win_is_valid(win) then
+        pcall(vim.api.nvim_win_set_buf, win, new_buf)
+      end
+    end
   end
-  dap.listeners.before.event_initialized["turbo-debug-clear-console"] = clear_console
+  -- Fire BEFORE the launch/attach request so the old terminal state
+  -- from the previous run is gone before the new terminal opens.
+  dap.listeners.before.launch["turbo-debug-clear-console"]  = clear_console
+  dap.listeners.before.attach["turbo-debug-clear-console"]  = clear_console
+  dap.listeners.before.restart["turbo-debug-clear-console"] = clear_console
 
   -- Default-collapse scopes the user considers noisy (Registers on
   -- codelldb, for example). We intercept the scopes response and set
@@ -1024,14 +1061,14 @@ function M.enter()
   end
 
   set_debug_chrome()
-  -- Bars BEFORE dapui.open so the sidebar and bottom tray compute their
-  -- proportions against the screen MINUS our bars, not against the full
-  -- screen. Calling ensure_dapui() here re-runs dapui.setup with freshly-
-  -- computed layout sizes based on current terminal dimensions — this is
-  -- what fixes the "Console balloons on second toggle" bug.
-  open_bars()
   ensure_dapui()
   require("dapui").open()
+  open_bars()
+  -- dapui creates full-height vertical splits for the sidebar. Without
+  -- this step the bars end up constrained to the non-sidebar column.
+  -- `wincmd K`/`J` rearranges the window tree so each bar spans full
+  -- editor width at the top/bottom, pushing everything else in-between.
+  force_bars_full_width()
 
   -- second install pass after dapui has created its buffers
   vim.schedule(function()
