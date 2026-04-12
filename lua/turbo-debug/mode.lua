@@ -81,12 +81,18 @@ local ICON = {
 local function build_default_layouts()
   local pos = config.opts.sidebar == "right" and "right" or "left"
 
-  -- Console height: fixed 5 rows. Dynamic sizing via min(5, 15%) was
-  -- producing the right number on first enter but dapui's internal
-  -- layout tracker was letting Console grow back up on re-enter,
-  -- eventually filling the column. A hard-coded size plus a post-open
-  -- `winfixheight = true` pin (see pin_dapui_sizes) stops the drift.
-  local console_size = config.opts.console_height or 5
+  -- Console height: max(5 rows, 15% of available vertical space). The
+  -- drift-back-to-huge bug is fixed by dapui.open({ reset = true }) in
+  -- M.enter, not by clamping the size small. User wants Console to
+  -- scale up on tall terminals while never going below 5 rows.
+  local statusline_rows = vim.o.laststatus > 0 and 1 or 0
+  local cmdline_rows    = math.max(1, vim.o.cmdheight)
+  local top_bar_rows    = 3  -- sep + content + sep (restored to 3 rows for visual symmetry)
+  local bottom_bar_rows = 2  -- content + sep
+  local avail = vim.o.lines - top_bar_rows - bottom_bar_rows - statusline_rows - cmdline_rows
+  if avail < 10 then avail = 10 end
+  local console_size = config.opts.console_height
+                       or math.max(5, math.floor(avail * 0.15))
 
   -- Sidebar width: ideal 40 cols, never less than 25, never more than 1/3
   -- of tty width. Scales down gracefully on narrow terminals, stops at 40
@@ -273,18 +279,23 @@ local function render_sbar()
   local pad_right = remain - pad_left
   local content_line = brand_text .. string.rep(" ", pad_left) .. status_msg .. string.rep(" ", pad_right) .. state_chip
 
-  -- 2 rows: sep / content  (no bottom separator — dapui's pane borders
-  -- act as the visual break between the bar and the source area below)
+  -- 3 rows: sep / content / sep. Both separators render with the
+  -- FloatBorder highlight to match dapui's own pane borders — user
+  -- reported the dark transition at the bottom of a 2-row status bar
+  -- looked inconsistent with the light-grey borders around everything
+  -- else.
   vim.bo[sbar_buf].modifiable = true
-  vim.api.nvim_buf_set_lines(sbar_buf, 0, -1, false, { sep, content_line })
+  vim.api.nvim_buf_set_lines(sbar_buf, 0, -1, false, { sep, content_line, sep })
   vim.bo[sbar_buf].modifiable = false
 
   vim.api.nvim_buf_clear_namespace(sbar_buf, bar_ns, 0, -1)
-  -- top separator
   pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 0, 0, {
     end_row = 0, end_col = #sep, hl_group = "TurboDebugBarSeparator",
   })
-  -- content: brand on left
+  pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 2, 0, {
+    end_row = 2, end_col = #sep, hl_group = "TurboDebugBarSeparator",
+  })
+  -- content
   pcall(vim.api.nvim_buf_set_extmark, sbar_buf, bar_ns, 1, 0, {
     end_row = 1, end_col = #brand_text, hl_group = "TurboDebugBarBrand",
   })
@@ -488,7 +499,7 @@ local function open_bars()
     sbar_win = vim.api.nvim_get_current_win()
     sbar_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_win_set_buf(sbar_win, sbar_buf)
-    vim.api.nvim_win_set_height(sbar_win, 2)
+    vim.api.nvim_win_set_height(sbar_win, 3)
     setup_bar_buf(sbar_buf)
     setup_bar_win(sbar_win)
     vim.wo[sbar_win].winfixheight = true
@@ -1064,15 +1075,14 @@ function M.enter()
 
   set_debug_chrome()
   ensure_dapui()
-  require("dapui").open()
-  -- Create bars AFTER dapui.open so :topleft split / :botright split
-  -- create full-width splits above/below whatever dapui built. Doing it
-  -- before dapui meant dapui's sidebar-vsplit could extend through the
-  -- bar rows, and my old `wincmd K/J` compensation caused layout drift
-  -- on re-entry (Console ballooning). Opening after dapui avoids both.
+  -- { reset = true } is critical: without it, dapui's WindowLayout:resize
+  -- uses whatever `win_state.size` drifted to last time (see
+  -- dapui/windows/layout.lua:82-116 — `update_sizes` writes current
+  -- ratios back to state, so sizes accumulate drift across close/open
+  -- cycles). `reset` tells it to ignore cached state and use init_size
+  -- (our original 0.25 per pane).
+  require("dapui").open({ reset = true })
   open_bars()
-  -- Pin dapui pane heights so re-entry / resize doesn't let Console
-  -- absorb freed rows.
   pin_dapui_sizes()
 
   -- second install pass after dapui has created its buffers
