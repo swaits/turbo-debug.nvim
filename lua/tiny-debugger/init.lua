@@ -3,12 +3,7 @@ local mode = require("tiny-debugger.mode")
 
 local M = {}
 
-local setup_done = false
-
 function M.setup(opts)
-  if setup_done then return end
-  setup_done = true
-
   config.merge(opts)
   require("tiny-debugger.breakpoints").setup()
   require("tiny-debugger.adapters").setup()

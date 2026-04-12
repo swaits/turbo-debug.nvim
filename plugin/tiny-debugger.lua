@@ -16,7 +16,5 @@ pcall(function()
   require("which-key").add({ { "<leader>d", group = "debug" } })
 end)
 
--- defer setup so user has time to call setup() with overrides
-vim.schedule(function()
-  require("tiny-debugger").setup()
-end)
+-- setup immediately (idempotent — user can call setup() again with overrides)
+require("tiny-debugger").setup()
