@@ -1,4 +1,4 @@
-local config = require("tiny-debugger.config")
+local config = require("turbo-debug.config")
 
 local M = {}
 
@@ -30,7 +30,7 @@ local global_info = {
 }
 
 local function build_content()
-  local lines = { " tiny-debugger", "" }
+  local lines = { " turbo-debug", "" }
   local width = #lines[1]
 
   local function add(key, label)

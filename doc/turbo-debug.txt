@@ -1,23 +1,23 @@
-*tiny-debugger.txt*    A zero-config debugging experience for Neovim 0.12+
+*turbo-debug.txt*    A zero-config debugging experience for Neovim 0.12+
 
 ==============================================================================
-CONTENTS                                            *tiny-debugger-contents*
+CONTENTS                                            *turbo-debug-contents*
 
-  1. Introduction .......................... |tiny-debugger-introduction|
-  2. Installation .......................... |tiny-debugger-installation|
-  3. Setup ................................. |tiny-debugger.setup|
-  4. Debug Mode ............................ |tiny-debugger-debug-mode|
-  5. Keybindings ........................... |tiny-debugger.keys|
-  6. Breakpoints ........................... |tiny-debugger-breakpoints|
-  7. UI Layout ............................. |tiny-debugger-layout|
-  8. Adapters .............................. |tiny-debugger.adapters|
-  9. API ................................... |tiny-debugger-api|
- 10. Troubleshooting ....................... |tiny-debugger-troubleshooting|
+  1. Introduction .......................... |turbo-debug-introduction|
+  2. Installation .......................... |turbo-debug-installation|
+  3. Setup ................................. |turbo-debug.setup|
+  4. Debug Mode ............................ |turbo-debug-debug-mode|
+  5. Keybindings ........................... |turbo-debug.keys|
+  6. Breakpoints ........................... |turbo-debug-breakpoints|
+  7. UI Layout ............................. |turbo-debug-layout|
+  8. Adapters .............................. |turbo-debug.adapters|
+  9. API ................................... |turbo-debug-api|
+ 10. Troubleshooting ....................... |turbo-debug-troubleshooting|
 
 ==============================================================================
-1. Introduction                                 *tiny-debugger-introduction*
+1. Introduction                                 *turbo-debug-introduction*
 
-tiny-debugger.nvim gives you a fully-featured, beautiful debugging experience
+turbo-debug.nvim gives you a fully-featured, beautiful debugging experience
 out of one line of config. Under the hood it wires together nvim-dap,
 nvim-dap-ui, nvim-dap-virtual-text, and persistent-breakpoints into a single
 cohesive experience with modal keybindings.
@@ -33,60 +33,61 @@ Features:
 - Zero-config adapters for 10+ languages
 
 ==============================================================================
-2. Installation                                 *tiny-debugger-installation*
+2. Installation                                 *turbo-debug-installation*
 
 Add one line to your init.lua: >lua
-  vim.pack.add("swaits/tiny-debugger.nvim")
+  vim.pack.add("swaits/turbo-debug.nvim")
 <
 That's it. All dependencies are managed automatically.
 
 Requires Neovim >= 0.12.
 
 ==============================================================================
-3. Setup                                               *tiny-debugger.setup*
+3. Setup                                               *turbo-debug.setup*
 
 Setup is optional. The plugin works with no configuration. To customize: >lua
-  require("tiny-debugger").setup({
-    help_on_enter = true,       -- show help box when entering debug mode
+  require("turbo-debug").setup({
+    help_on_enter = true,       -- show help splash on debug mode entry
+    quit_exits_mode = true,     -- q terminates AND exits debug mode
     builtin_adapters = true,    -- register built-in language adapters
-    keys = { ... },             -- override keybindings
+    keys = { ... },             -- override modal keybindings
+    global_keys = { ... },      -- override always-available keybindings
     adapters = { ... },         -- override or add language adapters
     dapui = { ... },            -- override nvim-dap-ui layout/settings
     virtual_text = { ... },     -- override nvim-dap-virtual-text settings
   })
 <
-                                           *tiny-debugger.setup.help_on_enter*
+                                           *turbo-debug.setup.help_on_enter*
 help_on_enter ~
   Type: boolean, Default: `true`
   Show the help box automatically when entering debug mode.
 
-                                        *tiny-debugger.setup.builtin_adapters*
+                                        *turbo-debug.setup.builtin_adapters*
 builtin_adapters ~
   Type: boolean, Default: `true`
   Register built-in adapters for supported languages. Set to `false` to
   disable all built-in adapter registration.
 
 ==============================================================================
-4. Debug Mode                                    *tiny-debugger-debug-mode*
+4. Debug Mode                                    *turbo-debug-debug-mode*
 
-Press `<leader>d` to toggle debug mode.
+Press `<leader>dd` to toggle debug mode.
 
 Entering debug mode:
 1. Opens nvim-dap-ui with the configured layout
 2. Enables inline virtual text for variable values
 3. Activates modal keybindings (buffer-local)
-4. Changes cursor highlight to indicate debug mode
-5. Shows help box (if `help_on_enter` is true)
+4. Shows winbar indicator and help splash (3s)
 
 Exiting debug mode (any of):
-- `<leader>d` again (manual toggle)
-- `q` (terminate session — auto-exits debug mode)
+- `<leader>dd` again (manual toggle)
+- `q` (terminate session — exits debug mode if `quit_exits_mode`)
 - DAP session ends naturally
 
 On exit, everything is restored: keymaps, UI, virtual text, cursor.
 
 ==============================================================================
-5. Keybindings                                         *tiny-debugger.keys*
+5. Keybindings                                         *turbo-debug.keys*
 
 Modal keybindings are active only during debug mode. They shadow editing
 keys you don't need while debugging, but preserve all navigation keys.
@@ -99,6 +100,9 @@ Default keymap:
   `d`     Step into                 Descend into the function
   `r`     Step out                  Return from the function
   `C`     Run to cursor             Continue to cursor
+  `x`     Toggle breakpoint         X marks the spot
+  `X`     Conditional breakpoint    Shift variant of x
+  `D`     Clear all breakpoints     Delete all
   `W`     Watch expr under cursor   Watch
   `K`     Hover / inspect           Matches LSP hover convention
   `E`     Eval in REPL              Evaluate
@@ -114,7 +118,7 @@ Always available (under `<leader>d` prefix, with which-key support):
   `<leader>dD`  Clear all breakpoints     Delete all
 
 Override any key: >lua
-  require("tiny-debugger").setup({
+  require("turbo-debug").setup({
     keys = {                          -- modal keys (debug mode only)
       continue = "g",
       step_over = false,              -- set to false to disable
@@ -131,19 +135,24 @@ Preserved keys (not shadowed):
 - Visual/yank: `v V y p u`
 - All Ctrl/leader combos
 
+                                       *turbo-debug.setup.quit_exits_mode*
+quit_exits_mode ~
+  Type: boolean, Default: `true`
+  Whether `q` (terminate) also exits debug mode. Set to `false` if you
+  want `q` to terminate the process but keep the debug UI open.
+
 ==============================================================================
-6. Breakpoints                                  *tiny-debugger-breakpoints*
+6. Breakpoints                                  *turbo-debug-breakpoints*
 
 Breakpoints are managed by persistent-breakpoints.nvim. They persist across
 Neovim restarts and are visible in the sign column at all times.
 
-`x` toggles a breakpoint on the current line.
-`X` prompts for a condition and sets a conditional breakpoint.
-
-Both work outside debug mode — no need to enter debug mode first.
+`<leader>dx` toggles a breakpoint (always available).
+`<leader>dX` sets a conditional breakpoint (always available).
+`x`, `X`, `D` also work as shortcuts during debug mode.
 
 ==============================================================================
-7. UI Layout                                       *tiny-debugger-layout*
+7. UI Layout                                       *turbo-debug-layout*
 
 Default layout:
 
@@ -157,14 +166,14 @@ Default layout:
   - Console (50%) — program stdout/stderr
 
 Override the layout: >lua
-  require("tiny-debugger").setup({
+  require("turbo-debug").setup({
     dapui = {
       layouts = { ... },  -- see nvim-dap-ui docs for format
     },
   })
 <
 ==============================================================================
-8. Adapters                                        *tiny-debugger.adapters*
+8. Adapters                                        *turbo-debug.adapters*
 
 Built-in adapter support (adapter binary must be installed):
 
@@ -190,7 +199,7 @@ Path resolution order:
 Adapter binaries are the user's responsibility to install.
 
 Override or add adapters: >lua
-  require("tiny-debugger").setup({
+  require("turbo-debug").setup({
     adapters = {
       python = { ... },    -- override built-in
       zig = { ... },        -- add new language
@@ -201,23 +210,23 @@ Override or add adapters: >lua
 Existing user nvim-dap configurations are never overridden.
 
 ==============================================================================
-9. API                                              *tiny-debugger-api*
+9. API                                              *turbo-debug-api*
 
-                                                    *tiny-debugger.toggle()*
-require("tiny-debugger").toggle()
+                                                    *turbo-debug.toggle()*
+require("turbo-debug").toggle()
   Toggle debug mode on/off.
 
-                                                    *tiny-debugger.active()*
-require("tiny-debugger").active()
+                                                    *turbo-debug.active()*
+require("turbo-debug").active()
   Returns `true` if debug mode is currently active, `false` otherwise.
   Useful for statusline integration.
 
 ==============================================================================
-10. Troubleshooting                          *tiny-debugger-troubleshooting*
+10. Troubleshooting                          *turbo-debug-troubleshooting*
 
 No adapter found ~
   Ensure the adapter binary is installed and on your PATH, or installed
-  via mason.nvim. tiny-debugger configures adapters, it does not install
+  via mason.nvim. turbo-debug configures adapters, it does not install
   them.
 
 Breakpoints not persisting ~
@@ -230,7 +239,7 @@ Virtual text not appearing ~
   `:lua print(require("nvim-dap-virtual-text") and "ok")`
 
 Version error ~
-  tiny-debugger.nvim requires Neovim >= 0.12 for vim.pack support.
+  turbo-debug.nvim requires Neovim >= 0.12 for vim.pack support.
 
 ==============================================================================
 vim:tw=78:ts=8:ft=help:norl:

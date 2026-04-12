@@ -1,5 +1,5 @@
 local assert_eq = require("helpers").assert_eq
-local loader = require("tiny-debugger.adapters.init")
+local loader = require("turbo-debug.adapters.init")
 local dap = require("dap")
 
 -- find_executable returns nil for non-existent binaries
@@ -10,7 +10,7 @@ assert_eq(loader.find_executable({ "sh" }) ~= nil, true, "find_executable finds 
 
 -- all adapter modules load and have register()
 for _, name in ipairs({ "python", "go", "c", "javascript" }) do
-  assert_eq(type(require("tiny-debugger.adapters." .. name).register), "function", name .. " has register()")
+  assert_eq(type(require("turbo-debug.adapters." .. name).register), "function", name .. " has register()")
 end
 
 -- register doesn't override existing adapter

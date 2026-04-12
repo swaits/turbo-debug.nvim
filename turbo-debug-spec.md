@@ -1,4 +1,4 @@
-# tiny-debugger.nvim — Product Specification
+# turbo-debug.nvim — Product Specification
 
 ## What Is This?
 
@@ -14,7 +14,7 @@ and persistent-breakpoints into a single cohesive experience with modal
 keybindings. The user installs one plugin and gets everything.
 
 ```lua
-vim.pack.add("swaits/tiny-debugger.nvim")
+vim.pack.add("swaits/turbo-debug.nvim")
 ```
 
 That's it. That's the whole setup.
@@ -81,7 +81,7 @@ One plugin install. Zero configuration. All of this:
 
 ## Dependencies (Managed Automatically)
 
-The user never sees or declares these. tiny-debugger calls `vim.pack.add` for
+The user never sees or declares these. turbo-debug calls `vim.pack.add` for
 each one internally:
 
 | Dependency                        | What it provides                          |
@@ -132,7 +132,7 @@ C/C++/Rust only). Out of scope.
 
 ```lua
 -- init.lua
-vim.pack.add("swaits/tiny-debugger.nvim")
+vim.pack.add("swaits/turbo-debug.nvim")
 ```
 
 One line. One plugin. Everything works.
@@ -140,7 +140,7 @@ One line. One plugin. Everything works.
 ### Configuration (optional)
 
 ```lua
-require("tiny-debugger").setup({
+require("turbo-debug").setup({
   -- all fields optional, these are the defaults
   help_on_enter = true,     -- show help box when entering debug mode
   keys = { ... },           -- override any keybinding
@@ -293,7 +293,7 @@ use the standard nvim-dap-ui element keybindings.
 
 ## UI Layout
 
-tiny-debugger configures nvim-dap-ui with a clean, purposeful layout:
+turbo-debug configures nvim-dap-ui with a clean, purposeful layout:
 
 ```
 ┌──────────────────────────────────┬──────────────────┐
@@ -428,16 +428,16 @@ For every adapter, we check paths in this order:
 ### Behavior
 
 - On first `c` (continue), if no `dap.configurations` exist for the current
-  filetype, tiny-debugger installs its built-in config automatically.
+  filetype, turbo-debug installs its built-in config automatically.
 - If the user has already configured adapters for a filetype via nvim-dap
-  directly, tiny-debugger does not override them.
+  directly, turbo-debug does not override them.
 - Adapter binary installation is the user's responsibility (mason, system
-  package manager, or manual). tiny-debugger configures, it doesn't install.
+  package manager, or manual). turbo-debug configures, it doesn't install.
 
 ### Configuration
 
 ```lua
-require("tiny-debugger").setup({
+require("turbo-debug").setup({
   adapters = {
     python = { ... },      -- override built-in
     zig = { ... },          -- add new language
@@ -500,16 +500,16 @@ This is a canonical Neovim plugin with proper help docs, license, and
 everything a user or contributor expects.
 
 ```
-tiny-debugger.nvim/
+turbo-debug.nvim/
 ├── LICENSE                     -- MIT
 ├── README.md                   -- install, quick start, screenshots
 ├── CONTRIBUTING.md             -- how to add adapters, run tests
 ├── doc/
-│   └── tiny-debugger.txt       -- :help tiny-debugger (vimdoc format)
+│   └── turbo-debug.txt       -- :help turbo-debug (vimdoc format)
 ├── plugin/
-│   └── tiny-debugger.lua       -- vim.pack.add deps, global x/X maps, setup
+│   └── turbo-debug.lua       -- vim.pack.add deps, global x/X maps, setup
 ├── lua/
-│   └── tiny-debugger/
+│   └── turbo-debug/
 │       ├── init.lua            -- public API (setup, toggle, active)
 │       ├── config.lua          -- default opts, deep merge with user opts
 │       ├── mode.lua            -- enter/exit debug mode, keybinding mgmt
@@ -541,10 +541,10 @@ tiny-debugger.nvim/
 
 ### Key Mechanisms
 
-**Dependency management:** `plugin/tiny-debugger.lua` calls `vim.pack.add`
+**Dependency management:** `plugin/turbo-debug.lua` calls `vim.pack.add`
 for each of the five dependencies. The user never sees or manages them.
 
-**Plugin wiring:** tiny-debugger calls `setup()` on nvim-dap-ui,
+**Plugin wiring:** turbo-debug calls `setup()` on nvim-dap-ui,
 nvim-dap-virtual-text, and persistent-breakpoints with its opinionated
 defaults, deep-merged with any user overrides from `opts`.
 
@@ -569,7 +569,7 @@ Autocmd to close on any keypress. Content built from the keys table.
 ### What We Don't Do
 
 - No custom UI widgets. nvim-dap-ui handles that.
-- No statusline integration beyond exposing `require("tiny-debugger").active()`.
+- No statusline integration beyond exposing `require("turbo-debug").active()`.
 - No telescope/fzf integration. Out of scope.
 - No reverse debugging built-in. Users can remap keys.
 - No test runner integration (debug nearest test). Out of scope.
@@ -582,7 +582,7 @@ Autocmd to close on any keypress. Content built from the keys table.
 
 A user who has never configured DAP should be able to:
 
-1. Add one line to their init.lua: `vim.pack.add("swaits/tiny-debugger.nvim")`
+1. Add one line to their init.lua: `vim.pack.add("swaits/turbo-debug.nvim")`
 2. Open a file in any of the world's top 10 languages.
 3. Press `x` on a line to set a breakpoint (visible immediately in gutter).
 4. Press `<leader>d` to enter debug mode. See the help box. See the UI.
@@ -622,7 +622,7 @@ All source control uses **jj** (Jujutsu), never git.
 ### Task 1: Scaffold — canonical plugin structure
 
 **What:** Create the repo with all directories, empty files, LICENSE (MIT),
-empty README.md, CONTRIBUTING.md stub, and `doc/tiny-debugger.txt` with
+empty README.md, CONTRIBUTING.md stub, and `doc/turbo-debug.txt` with
 the vimdoc header and a skeleton table of contents.
 
 **Files:**
@@ -630,17 +630,17 @@ the vimdoc header and a skeleton table of contents.
 LICENSE
 README.md
 CONTRIBUTING.md
-doc/tiny-debugger.txt
-plugin/tiny-debugger.lua          (empty, just a header comment)
-lua/tiny-debugger/init.lua        (returns empty table)
-lua/tiny-debugger/config.lua      (returns default opts table)
+doc/turbo-debug.txt
+plugin/turbo-debug.lua          (empty, just a header comment)
+lua/turbo-debug/init.lua        (returns empty table)
+lua/turbo-debug/config.lua      (returns default opts table)
 tests/minimal_init.lua            (minimal nvim init for testing)
 ```
 
 **Acceptance criteria:**
 - `nvim --clean -u tests/minimal_init.lua` starts without errors
-- `:help tiny-debugger` opens the help file (even if sparse)
-- `:lua print(type(require("tiny-debugger")))` prints `table`
+- `:help turbo-debug` opens the help file (even if sparse)
+- `:lua print(type(require("turbo-debug")))` prints `table`
 - `jj log` shows exactly one clean commit
 
 **Test:** Manual smoke test in Neovim.
@@ -651,13 +651,13 @@ tests/minimal_init.lua            (minimal nvim init for testing)
 
 ### Task 2: Dependency management via vim.pack
 
-**What:** `plugin/tiny-debugger.lua` calls `vim.pack.add` for all five
+**What:** `plugin/turbo-debug.lua` calls `vim.pack.add` for all five
 dependencies. Validates Neovim >= 0.12. Prints a clear error and returns
 if version check fails.
 
 **Files:**
 ```
-plugin/tiny-debugger.lua
+plugin/turbo-debug.lua
 ```
 
 **Acceptance criteria:**
@@ -675,18 +675,18 @@ should not error. Test version gate by temporarily faking `vim.version()`.
 
 ### Task 3: Config module — defaults and deep merge
 
-**What:** `lua/tiny-debugger/config.lua` defines the full default options
+**What:** `lua/turbo-debug/config.lua` defines the full default options
 table (keys, help_on_enter, dapui layout, virtual_text settings, etc.)
 and exports a `merge(user_opts)` function that deep-merges user overrides.
 
 **Files:**
 ```
-lua/tiny-debugger/config.lua
+lua/turbo-debug/config.lua
 tests/test_config.lua
 ```
 
 **Acceptance criteria:**
-- `require("tiny-debugger.config").defaults` returns the full table
+- `require("turbo-debug.config").defaults` returns the full table
 - Merging `{ keys = { continue = "g" } }` overrides only that key
 - Merging `{ keys = { continue = false } }` disables that key
 - Merging `{}` returns defaults unchanged
@@ -701,17 +701,17 @@ outputs. Run with `nvim --headless -u tests/minimal_init.lua -c 'luafile tests/t
 
 ### Task 4: Debug mode — enter, exit, keybinding lifecycle
 
-**What:** `lua/tiny-debugger/mode.lua` implements enter/exit debug mode.
+**What:** `lua/turbo-debug/mode.lua` implements enter/exit debug mode.
 On enter: sets buffer-local keymaps (stashing conflicts), sets `dCursor`
 highlight. On exit: removes keymaps (restoring originals), clears highlight.
-`lua/tiny-debugger/init.lua` exposes `toggle()` and `active()`.
+`lua/turbo-debug/init.lua` exposes `toggle()` and `active()`.
 
-`plugin/tiny-debugger.lua` maps `<leader>d` to `toggle()`.
+`plugin/turbo-debug.lua` maps `<leader>d` to `toggle()`.
 
 **Files:**
 ```
-lua/tiny-debugger/init.lua
-lua/tiny-debugger/mode.lua
+lua/turbo-debug/init.lua
+lua/turbo-debug/mode.lua
 tests/test_mode.lua
 tests/test_keys.lua
 ```
@@ -721,7 +721,7 @@ tests/test_keys.lua
 - `<leader>d` again exits; all keys are removed
 - A pre-existing user mapping for `c` is stashed on enter and restored on
   exit (verified by checking `vim.fn.maparg`)
-- `require("tiny-debugger").active()` returns `true`/`false` correctly
+- `require("turbo-debug").active()` returns `true`/`false` correctly
 - Navigation keys (`h`, `j`, `w`, `b`, `/`, `n`, etc.) still work in
   debug mode
 - `dCursor` highlight group is set on enter, cleared on exit
@@ -737,13 +737,13 @@ debug mode, verifies it's overridden, exits, verifies it's restored.
 
 ### Task 5: Help box
 
-**What:** `lua/tiny-debugger/help.lua` implements the floating help window.
+**What:** `lua/turbo-debug/help.lua` implements the floating help window.
 Reads from the active keys config to build content dynamically. Opens
 anchored to bottom-right. Closes on any keypress via autocmd.
 
 **Files:**
 ```
-lua/tiny-debugger/help.lua
+lua/turbo-debug/help.lua
 tests/test_help.lua
 ```
 
@@ -766,13 +766,13 @@ Tests with a remapped key to verify dynamic content.
 
 ### Task 6: UI wiring — nvim-dap-ui layout
 
-**What:** `lua/tiny-debugger/ui.lua` calls `dapui.setup()` with our
+**What:** `lua/turbo-debug/ui.lua` calls `dapui.setup()` with our
 opinionated layout. Wires dap listeners to open/close UI on session
 start/end. Integrates with mode enter/exit.
 
 **Files:**
 ```
-lua/tiny-debugger/ui.lua
+lua/turbo-debug/ui.lua
 ```
 
 **Acceptance criteria:**
@@ -793,14 +793,14 @@ layout in opts, verify override takes effect.
 
 ### Task 7: Virtual text wiring
 
-**What:** `lua/tiny-debugger/virtual_text.lua` calls
+**What:** `lua/turbo-debug/virtual_text.lua` calls
 `require("nvim-dap-virtual-text").setup()` with our defaults (commented
 style, highlight changed variables, current frame only). Integrates with
 mode enter/exit (enable on enter, disable on exit).
 
 **Files:**
 ```
-lua/tiny-debugger/virtual_text.lua
+lua/turbo-debug/virtual_text.lua
 ```
 
 **Acceptance criteria:**
@@ -819,13 +819,13 @@ appears next to variable definitions. Exit debug mode, verify text clears.
 
 ### Task 8: Persistent breakpoints wiring
 
-**What:** `lua/tiny-debugger/breakpoints.lua` calls
+**What:** `lua/turbo-debug/breakpoints.lua` calls
 `require("persistent-breakpoints").setup()` and maps `x`/`X` globally
 (outside debug mode) to toggle/conditional breakpoint.
 
 **Files:**
 ```
-lua/tiny-debugger/breakpoints.lua
+lua/turbo-debug/breakpoints.lua
 tests/test_breakpoints.lua
 ```
 
@@ -853,7 +853,7 @@ element programmatically.
 
 **Files:**
 ```
-lua/tiny-debugger/mode.lua  (add watch action)
+lua/turbo-debug/mode.lua  (add watch action)
 ```
 
 **Acceptance criteria:**
@@ -880,7 +880,7 @@ evaluation).
 
 **Files:**
 ```
-lua/tiny-debugger/mode.lua  (add hover + eval actions)
+lua/turbo-debug/mode.lua  (add hover + eval actions)
 ```
 
 **Acceptance criteria:**
@@ -902,14 +902,14 @@ result. Press `E`, type an expression in the REPL, verify output.
 
 **What:** First two adapter configs. Python includes venv auto-detection.
 Go includes delve auto-launch. Adapter loader in
-`lua/tiny-debugger/adapters/init.lua` handles registration and path
+`lua/turbo-debug/adapters/init.lua` handles registration and path
 resolution.
 
 **Files:**
 ```
-lua/tiny-debugger/adapters/init.lua
-lua/tiny-debugger/adapters/python.lua
-lua/tiny-debugger/adapters/go.lua
+lua/turbo-debug/adapters/init.lua
+lua/turbo-debug/adapters/python.lua
+lua/turbo-debug/adapters/go.lua
 tests/test_adapters.lua
 ```
 
@@ -936,7 +936,7 @@ Uses codelldb. Program picker via `vim.fn.input`.
 
 **Files:**
 ```
-lua/tiny-debugger/adapters/c.lua
+lua/turbo-debug/adapters/c.lua
 ```
 
 **Acceptance criteria:**
@@ -958,7 +958,7 @@ breakpoints and stepping work.
 
 **Files:**
 ```
-lua/tiny-debugger/adapters/javascript.lua
+lua/turbo-debug/adapters/javascript.lua
 ```
 
 **Acceptance criteria:**
@@ -979,9 +979,9 @@ kotlin-debug-adapter.
 
 **Files:**
 ```
-lua/tiny-debugger/adapters/cs.lua
-lua/tiny-debugger/adapters/java.lua
-lua/tiny-debugger/adapters/kotlin.lua
+lua/turbo-debug/adapters/cs.lua
+lua/turbo-debug/adapters/java.lua
+lua/turbo-debug/adapters/kotlin.lua
 ```
 
 **Acceptance criteria:**
@@ -1003,9 +1003,9 @@ Lua via osv (optional, only if one-small-step-for-vimkind is available).
 
 **Files:**
 ```
-lua/tiny-debugger/adapters/php.lua
-lua/tiny-debugger/adapters/ruby.lua
-lua/tiny-debugger/adapters/lua.lua
+lua/turbo-debug/adapters/php.lua
+lua/turbo-debug/adapters/ruby.lua
+lua/turbo-debug/adapters/lua.lua
 ```
 
 **Acceptance criteria:**
@@ -1023,25 +1023,25 @@ skip when osv is not installed.
 
 ### Task 16: Vimdoc — complete help file
 
-**What:** Write the full `doc/tiny-debugger.txt` in vimdoc format. Covers
+**What:** Write the full `doc/turbo-debug.txt` in vimdoc format. Covers
 installation, configuration, all keybindings, all options, adapter
 customization, and troubleshooting. Generate helptags.
 
 **Files:**
 ```
-doc/tiny-debugger.txt
+doc/turbo-debug.txt
 doc/tags                        (generated)
 ```
 
 **Acceptance criteria:**
-- `:help tiny-debugger` opens the help file
-- `:help tiny-debugger.setup` jumps to the setup section
-- `:help tiny-debugger.keys` jumps to the keybindings section
-- `:help tiny-debugger.adapters` jumps to the adapters section
+- `:help turbo-debug` opens the help file
+- `:help turbo-debug.setup` jumps to the setup section
+- `:help turbo-debug.keys` jumps to the keybindings section
+- `:help turbo-debug.adapters` jumps to the adapters section
 - Every public function and option is documented
 - All tag references resolve correctly
 
-**Test:** Open Neovim, run `:helptags doc/`, then `:help tiny-debugger`
+**Test:** Open Neovim, run `:helptags doc/`, then `:help turbo-debug`
 and verify all sections and tags work.
 
 **jj commit:** `docs: complete vimdoc help file with all tags`
@@ -1084,7 +1084,7 @@ discovered.
 - All 11 success criteria steps pass for Python
 - All 11 success criteria steps pass for C or Go
 - No errors in `:messages` after a full debug session lifecycle
-- Clean startup: no errors on `nvim --clean` with only tiny-debugger
+- Clean startup: no errors on `nvim --clean` with only turbo-debug
 
 **Test:** Manual walkthrough of the full success criteria. Document results.
 

@@ -1,4 +1,4 @@
-local config = require("tiny-debugger.config")
+local config = require("turbo-debug.config")
 
 local M = {}
 

@@ -1,4 +1,4 @@
-local loader = require("tiny-debugger.adapters.init")
+local loader = require("turbo-debug.adapters.init")
 
 local M = {}
 

@@ -1,5 +1,5 @@
 local assert_eq = require("helpers").assert_eq
-local td = require("tiny-debugger")
+local td = require("turbo-debug")
 
 local function has_buf_map(key)
   for _, m in ipairs(vim.api.nvim_buf_get_keymap(0, "n")) do

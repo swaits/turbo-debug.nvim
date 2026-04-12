@@ -1,7 +1,7 @@
--- tiny-debugger.nvim — entry point
+-- turbo-debug.nvim — entry point
 
 if vim.fn.has("nvim-0.12") ~= 1 then
-  vim.notify("tiny-debugger.nvim requires Neovim >= 0.12", vim.log.levels.ERROR)
+  vim.notify("turbo-debug.nvim requires Neovim >= 0.12", vim.log.levels.ERROR)
   return
 end
 
@@ -17,4 +17,4 @@ pcall(function()
 end)
 
 -- setup immediately (idempotent — user can call setup() again with overrides)
-require("tiny-debugger").setup()
+require("turbo-debug").setup()

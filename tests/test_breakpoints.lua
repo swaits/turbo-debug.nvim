@@ -1,5 +1,5 @@
 local assert_eq = require("helpers").assert_eq
-local td = require("tiny-debugger")
+local td = require("turbo-debug")
 td.setup()
 
 -- global breakpoint mappings exist under <leader>d prefix

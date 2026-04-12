@@ -1,5 +1,5 @@
-local config = require("tiny-debugger.config")
-local help = require("tiny-debugger.help")
+local config = require("turbo-debug.config")
+local help = require("turbo-debug.help")
 
 local M = {}
 
@@ -20,10 +20,10 @@ local function ensure_dapui()
   require("dapui").setup(config.opts.dapui)
 
   local dap = require("dap")
-  dap.listeners.after.event_terminated["tiny-debugger"] = function()
+  dap.listeners.after.event_terminated["turbo-debug"] = function()
     if active then M.exit() end
   end
-  dap.listeners.after.event_exited["tiny-debugger"] = function()
+  dap.listeners.after.event_exited["turbo-debug"] = function()
     if active then M.exit() end
   end
 
@@ -139,9 +139,9 @@ local function set_keymaps(buf)
   for name, key in pairs(keys) do
     if key and actions[name] then
       stash_mapping(buf, key)
-      vim.keymap.set("n", key, actions[name], { buffer = buf, silent = true, desc = "tiny-debugger: " .. name })
+      vim.keymap.set("n", key, actions[name], { buffer = buf, silent = true, desc = "turbo-debug: " .. name })
       if visual_actions[name] then
-        vim.keymap.set("v", key, actions[name], { buffer = buf, silent = true, desc = "tiny-debugger: " .. name })
+        vim.keymap.set("v", key, actions[name], { buffer = buf, silent = true, desc = "turbo-debug: " .. name })
       end
       mapped_keys[#mapped_keys + 1] = { name = name, key = key }
     end

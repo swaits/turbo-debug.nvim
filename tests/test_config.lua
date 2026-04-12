@@ -1,5 +1,5 @@
 local assert_eq = require("helpers").assert_eq
-local config = require("tiny-debugger.config")
+local config = require("turbo-debug.config")
 
 -- defaults unchanged after empty merge
 local opts = config.merge({})

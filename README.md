@@ -1,4 +1,4 @@
-# tiny-debugger.nvim
+# turbo-debug.nvim
 
 A zero-config debugging experience for Neovim 0.12+. One plugin install, full
 IDE-class debugging: inline variable values, hover inspection, persistent
@@ -7,10 +7,10 @@ breakpoints, watch expressions, and modal keybindings that just work.
 ## Install
 
 ```lua
-vim.pack.add("swaits/tiny-debugger.nvim")
+vim.pack.add("swaits/turbo-debug.nvim")
 ```
 
-That's it. No other config needed. See `:help tiny-debugger` for customization.
+That's it. No other config needed. See `:help turbo-debug` for customization.
 
 ## Usage
 

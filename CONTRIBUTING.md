@@ -4,7 +4,7 @@ We use **jj** (Jujutsu) for source control, not git.
 
 ## Adding a new adapter
 
-1. Create `lua/tiny-debugger/adapters/<language>.lua` (see `go.lua` for reference)
+1. Create `lua/turbo-debug/adapters/<language>.lua` (see `go.lua` for reference)
 2. Add the module name to the loader list in `adapters/init.lua`
 3. Add the language to vimdoc
 

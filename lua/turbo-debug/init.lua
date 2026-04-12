@@ -1,12 +1,12 @@
-local config = require("tiny-debugger.config")
-local mode = require("tiny-debugger.mode")
+local config = require("turbo-debug.config")
+local mode = require("turbo-debug.mode")
 
 local M = {}
 
 function M.setup(opts)
   config.merge(opts)
-  require("tiny-debugger.breakpoints").setup()
-  require("tiny-debugger.adapters").setup()
+  require("turbo-debug.breakpoints").setup()
+  require("turbo-debug.adapters").setup()
 
   -- global toggle keybinding
   local toggle_key = config.opts.global_keys.toggle

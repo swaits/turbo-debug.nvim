@@ -1,6 +1,6 @@
 local assert_eq = require("helpers").assert_eq
-local help = require("tiny-debugger.help")
-local config = require("tiny-debugger.config")
+local help = require("turbo-debug.help")
+local config = require("turbo-debug.config")
 
 -- open creates a valid window
 help.open()

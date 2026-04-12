@@ -1,4 +1,4 @@
-local config = require("tiny-debugger.config")
+local config = require("turbo-debug.config")
 
 local M = {}
 
@@ -92,7 +92,7 @@ function M.setup()
 
   -- load adapters with non-trivial logic from separate files
   for _, name in ipairs({ "python", "go", "c", "javascript" }) do
-    local ok, adapter_mod = pcall(require, "tiny-debugger.adapters." .. name)
+    local ok, adapter_mod = pcall(require, "turbo-debug.adapters." .. name)
     if ok and adapter_mod.register then
       adapter_mod.register(dap)
     end
