@@ -14,7 +14,7 @@ That's it. No other config needed. See `:help tiny-debugger` for customization.
 
 ## Usage
 
-`<leader>d` toggles debug mode. `x` sets breakpoints (works anytime).
+`<leader>d` toggles debug mode. `<leader>x` sets breakpoints (works anytime).
 
 During debug mode, single-key controls:
 
@@ -25,10 +25,17 @@ During debug mode, single-key controls:
 | `d` | Step into              | `E` | Eval in REPL           |
 | `r` | Step out               | `q` | Terminate session      |
 | `C` | Run to cursor          | `R` | Restart session        |
-| `x` | Toggle breakpoint      | `D` | Clear all breakpoints  |
-| `X` | Conditional breakpoint | `?` | Help popup             |
+| `?` | Help popup             |     |                        |
 
-All navigation keys preserved. Keybindings vanish when you exit debug mode.
+Always available (no debug mode needed):
+
+| Key | Action                 |
+|-----|------------------------|
+| `<leader>x` | Toggle breakpoint      |
+| `<leader>X` | Conditional breakpoint |
+| `<leader>D` | Clear all breakpoints  |
+
+All navigation keys preserved. Modal keybindings vanish when you exit debug mode.
 
 ## Supported Languages
 

@@ -99,9 +99,6 @@ Default keymap:
   `d`     Step into                 Descend into the function
   `r`     Step out                  Return from the function
   `C`     Run to cursor             Continue to cursor
-  `x`     Toggle breakpoint         X marks the spot (always active)
-  `X`     Conditional breakpoint    Shift variant of x (always active)
-  `D`     Clear all breakpoints     Delete all (always active)
   `W`     Watch expr under cursor   Watch
   `K`     Hover / inspect           Matches LSP hover convention
   `E`     Eval in REPL              Evaluate
@@ -109,7 +106,11 @@ Default keymap:
   `R`     Restart session           Rerun
   `?`     Help popup                Show keybindings
 
-Note: `x`, `X`, and `D` work outside debug mode too (persistent breakpoints).
+Always available (not part of debug mode):
+
+  `<leader>x`   Toggle breakpoint         X marks the spot
+  `<leader>X`   Conditional breakpoint    Shift variant
+  `<leader>D`   Clear all breakpoints     Delete all
 
 Override any key: >lua
   require("tiny-debugger").setup({
