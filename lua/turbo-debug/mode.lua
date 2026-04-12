@@ -50,7 +50,14 @@ local ICON = {
 
   -- brand / state emoji
   bug         = "\xf0\x9f\x90\x9b",             -- 🐛 bug (U+1F41B)
-  help        = "\xf0\x9f\x92\xa1",             -- 💡 lightbulb (U+1F4A1) — insight/help
+  help        = "\xe2\x9d\x93",                 -- ❓ black question mark ornament
+                                                -- (U+2753). It's BMP but is
+                                                -- Emoji_Presentation by default,
+                                                -- so modern terminals render it
+                                                -- as color. The previous attempt
+                                                -- appeared broken only because
+                                                -- of a misaligned extmark; with
+                                                -- that gone, ❓ renders fine.
 
   -- IP arrows
   ip_left     = "\xf0\x9f\x91\x88",             -- 👈 backhand pointing left (U+1F448)
@@ -84,9 +91,10 @@ local function build_default_layouts()
       },
     },
     {
-      -- 9 rows (was 12) to leave room for the 3-row control bar below
+      -- 8 rows — the control bar below takes 4 rows (sep + state + controls
+      -- + sep). 8 + 4 = 12, matching the dapui default tray size.
       position = "bottom",
-      size = 9,
+      size = 8,
       elements = {
         { id = "repl",    size = 0.50 },
         { id = "console", size = 0.50 },
@@ -110,19 +118,19 @@ local function define_highlights()
   hl(0, "TurboDebugBarRunning",     { default = true, link = "DiagnosticInfo" })
   hl(0, "TurboDebugBarPaused",      { default = true, link = "DiagnosticError" })
 
-  -- The key letter inside (c)ontinue etc. gets bold + underline + Special's
-  -- fg. nvim_set_hl can't combine link + bold, so we copy Special's fg
-  -- explicitly and add bold/underline. Re-applied on ColorScheme so theme
-  -- swaps don't blank it out.
+  -- The key letter inside (c)ontinue etc. gets bold + Special's fg.
+  -- No underline — the descender on lowercase q/g/p/y overlaps the
+  -- underline and makes the glyph unreadable (q reads as g, etc.).
+  -- nvim_set_hl can't combine link + bold, so copy Special's fg explicitly.
+  -- Re-applied on ColorScheme so theme swaps don't blank it out.
   local function apply_key_hl()
     local ok, src = pcall(vim.api.nvim_get_hl, 0, { name = "Special", link = false })
     if not ok or not src or not src.fg then
-      -- fallback: at least make it bold via linking to something bold-ish
       vim.api.nvim_set_hl(0, "TurboDebugBarKey", { default = true, link = "Special" })
       return
     end
     vim.api.nvim_set_hl(0, "TurboDebugBarKey", {
-      fg = src.fg, bg = src.bg, bold = true, underline = true, default = true,
+      fg = src.fg, bg = src.bg, bold = true, default = true,
     })
   end
   apply_key_hl()
@@ -207,6 +215,13 @@ local function build_control_text(icon, key, tail)
   return table.concat(parts), key_col, key_end_col
 end
 
+-- 4-row bar layout:
+--   row 0 (line 1): ─ top separator
+--   row 1 (line 2): state chip + dap.status()       ❓ help
+--   row 2 (line 3): controls (centered)
+--   row 3 (line 4): ─ bottom separator
+-- Help is on its own anchored right-of-row-1 so it can NEVER be pushed
+-- off by long status text or wide control labels.
 local function render_bar()
   if not (bar_buf and vim.api.nvim_buf_is_valid(bar_buf)) then return end
   if not (bar_win and vim.api.nvim_win_is_valid(bar_win)) then return end
@@ -217,28 +232,43 @@ local function render_bar()
 
   local state, state_hl = dap_state()
 
-  -- ─── LEFT ZONE ─── state chip (always shown) + dap.status() (optional)
+  -- ─── ROW 1: state info + help ───────────────────────────
   local chip_text = " " .. ICON.bug .. " DEBUG " .. ICON.divider .. " " .. state .. " "
   local status_ok, status_msg = pcall(function() return require("dap").status() end)
   if not status_ok then status_msg = "" end
-  local status_text = (status_msg ~= "" and ("  " .. status_msg) or "")
+  local status_text = status_msg ~= "" and ("  " .. status_msg) or ""
 
-  -- ─── CENTER ZONE ─── control labels, each clickable. Two labels have
-  -- modal variants that track the dap state so the text reflects what the
-  -- key will ACTUALLY do right now:
-  --   (c) start    when no session is running
-  --   (c)ontinue   when a session is paused or running
-  --   (q)uit       when no session is running (exits debug mode)
-  --   (q) terminate when a session is running (kills the process)
-  local has_session = state ~= "READY"
-  local continue_icon, continue_tail
-  if has_session then
-    continue_icon = ICON.go
-    continue_tail = "ontinue"
-  else
-    continue_icon = ICON.start_rkt
-    continue_tail = " start"
+  local help_text = ICON.help .. " help "
+
+  -- fit-check: if status is too long, truncate it so help stays anchored
+  local chip_dw = vim.fn.strdisplaywidth(chip_text)
+  local help_dw = vim.fn.strdisplaywidth(help_text)
+  local status_dw = vim.fn.strdisplaywidth(status_text)
+  local needed = chip_dw + status_dw + help_dw + 2  -- at least 2 cells of spacer
+  if needed > width and status_dw > 0 then
+    local max_status = width - chip_dw - help_dw - 5
+    if max_status > 5 then
+      status_text = "  " .. status_msg:sub(1, max_status - 3) .. ICON.ellipsis
+      status_dw = vim.fn.strdisplaywidth(status_text)
+    else
+      status_text = ""
+      status_dw = 0
+    end
   end
+
+  local left_state = chip_text .. status_text
+  local left_state_dw = chip_dw + status_dw
+  local state_pad = width - left_state_dw - help_dw
+  if state_pad < 1 then state_pad = 1 end
+  local state_line = left_state .. string.rep(" ", state_pad) .. help_text
+
+  -- ─── ROW 2: controls (centered) ─────────────────────────
+  -- Modal variants so the text reflects what the key will ACTUALLY do:
+  --   no session:  (c) start     (q)uit
+  --   active:      (c)ontinue    (q) terminate
+  local has_session = state ~= "READY"
+  local continue_icon = has_session and ICON.go or ICON.start_rkt
+  local continue_tail = has_session and "ontinue" or " start"
   local quit_tail = has_session and " terminate" or "uit"
 
   local controls = {
@@ -250,153 +280,97 @@ local function render_bar()
     { icon = ICON.stop,      key = keyof("terminate", "q"), tail = quit_tail,     fn = action("terminate") },
   }
 
-  -- ─── RIGHT ZONE ─── help (no "(?)" — the ❓ emoji is self-documenting)
-  local help_icon = ICON.help
-  local help_label_text = help_icon .. " help "
-  local help_fn = function() require("turbo-debug.help").open() end
-
-  -- compose the center text first so we can measure it
-  local center_parts = {}
-  local center_spans = {}      -- { byte_start, byte_end, hl }
-  local center_key_spans = {}  -- { byte_start, byte_end } for TurboDebugBarKey
-  local center_zones = {}      -- { byte_start, byte_end, fn } pre-display-column
+  local ctrl_parts = {}
+  local ctrl_spans = {}
+  local ctrl_key_spans = {}
+  local ctrl_zones_bytes = {}
   local gap = "   "
   for i, c in ipairs(controls) do
-    local prefix_len = #table.concat(center_parts)
+    local prefix_len = #table.concat(ctrl_parts)
     if i > 1 then
-      center_parts[#center_parts + 1] = gap
+      ctrl_parts[#ctrl_parts + 1] = gap
       prefix_len = prefix_len + #gap
     end
     local txt, kcol, kend = build_control_text(c.icon, c.key, c.tail)
-    local label_start = prefix_len
-    local label_end = prefix_len + #txt
-    center_parts[#center_parts + 1] = txt
-    center_spans[#center_spans + 1] = { label_start, label_end, "TurboDebugBarCtrl" }
-    center_key_spans[#center_key_spans + 1] = { label_start + kcol, label_start + kend }
-    center_zones[#center_zones + 1] = { label_start, label_end, c.fn }
+    ctrl_parts[#ctrl_parts + 1] = txt
+    ctrl_spans[#ctrl_spans + 1] = { prefix_len, prefix_len + #txt, "TurboDebugBarCtrl" }
+    ctrl_key_spans[#ctrl_key_spans + 1] = { prefix_len + kcol, prefix_len + kend }
+    ctrl_zones_bytes[#ctrl_zones_bytes + 1] = { prefix_len, prefix_len + #txt, c.fn }
   end
-  local center_text = table.concat(center_parts)
+  local controls_text = table.concat(ctrl_parts)
+  local controls_dw = vim.fn.strdisplaywidth(controls_text)
+  local ctrl_pad_left = math.floor((width - controls_dw) / 2)
+  if ctrl_pad_left < 0 then ctrl_pad_left = 0 end
+  local ctrl_pad_right = width - controls_dw - ctrl_pad_left
+  if ctrl_pad_right < 0 then ctrl_pad_right = 0 end
+  local controls_line = string.rep(" ", ctrl_pad_left) .. controls_text .. string.rep(" ", ctrl_pad_right)
 
-  -- widths in display columns (not bytes — emoji are multi-byte and multi-cell)
-  local left_dw   = vim.fn.strdisplaywidth(chip_text) + vim.fn.strdisplaywidth(status_text)
-  local center_dw = vim.fn.strdisplaywidth(center_text)
-  local right_dw  = vim.fn.strdisplaywidth(help_label_text)
-
-  -- Graceful degradation when the window narrows. Priority (most important last):
-  --   1. dap.status()     — drop first
-  --   2. center controls  — truncate from the right
-  --   3. state chip       — collapse to just "🐛"
-  --   4. help             — NEVER drop
-  local show_status = true
-  local show_controls = true
-  local show_chip = true
-
-  if left_dw + center_dw + right_dw + 4 > width then
-    show_status = false  -- drop status first
-    left_dw = vim.fn.strdisplaywidth(chip_text)
-  end
-  if left_dw + center_dw + right_dw + 4 > width then
-    show_controls = false  -- drop center next
-    center_dw = 0
-  end
-  if left_dw + right_dw + 2 > width then
-    show_chip = false  -- collapse chip to just the bug icon
-    chip_text = " " .. ICON.bug .. " "
-    left_dw = vim.fn.strdisplaywidth(chip_text)
-  end
-
-  -- compose: [left][pad1][center][pad2][right]
-  local left_text = chip_text .. (show_status and status_text or "")
-  local right_text = help_label_text
-  local center_to_use = show_controls and center_text or ""
-  local center_dw_used = show_controls and center_dw or 0
-
-  local remain = width - left_dw - center_dw_used - right_dw
-  if remain < 0 then remain = 0 end
-  -- split remaining space symmetrically on either side of the center
-  local pad1 = math.floor(remain / 2)
-  local pad2 = remain - pad1
-  local line = left_text .. string.rep(" ", pad1) .. center_to_use .. string.rep(" ", pad2) .. right_text
-
-  -- safety truncate
-  if vim.fn.strdisplaywidth(line) > width then
-    -- keep right-anchored help visible by truncating from the middle if possible
-    line = line:sub(1, width)
-  end
-
+  -- ─── commit buffer + extmarks ──────────────────────────
   vim.bo[bar_buf].modifiable = true
-  vim.api.nvim_buf_set_lines(bar_buf, 0, -1, false, { sep, line, sep })
+  vim.api.nvim_buf_set_lines(bar_buf, 0, -1, false, { sep, state_line, controls_line, sep })
   vim.bo[bar_buf].modifiable = false
 
   vim.api.nvim_buf_clear_namespace(bar_buf, bar_ns, 0, -1)
 
   -- top + bottom separator highlights
-  vim.api.nvim_buf_set_extmark(bar_buf, bar_ns, 0, 0, {
+  pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 0, 0, {
     end_row = 0, end_col = #sep, hl_group = "TurboDebugBarSeparator",
   })
-  vim.api.nvim_buf_set_extmark(bar_buf, bar_ns, 2, 0, {
-    end_row = 2, end_col = #sep, hl_group = "TurboDebugBarSeparator",
+  pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 3, 0, {
+    end_row = 3, end_col = #sep, hl_group = "TurboDebugBarSeparator",
   })
 
-  -- state chip highlight (at the start of the line)
-  local chip_end = #chip_text
+  -- row 1: state chip color + status + help
   pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, 0, {
-    end_row = 1, end_col = chip_end, hl_group = state_hl,
+    end_row = 1, end_col = #chip_text, hl_group = state_hl,
   })
-  if show_status and #status_text > 0 then
-    local s = chip_end
-    local e = chip_end + #status_text
-    pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, s, {
-      end_row = 1, end_col = e, hl_group = "TurboDebugBarStatus",
+  if #status_text > 0 then
+    pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, #chip_text, {
+      end_row = 1, end_col = #chip_text + #status_text, hl_group = "TurboDebugBarStatus",
+    })
+  end
+  local help_byte_start = #state_line - #help_text
+  pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, help_byte_start, {
+    end_row = 1, end_col = #state_line, hl_group = "TurboDebugBarCtrl",
+  })
+
+  -- row 2: controls (offset by ctrl_pad_left bytes, which is all ASCII spaces)
+  local ctrl_byte_offset = ctrl_pad_left  -- spaces are 1 byte each
+  click_zones = {}
+  for _, span in ipairs(ctrl_spans) do
+    pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 2, ctrl_byte_offset + span[1], {
+      end_row = 2, end_col = ctrl_byte_offset + span[2], hl_group = span[3],
+    })
+  end
+  for _, span in ipairs(ctrl_key_spans) do
+    pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 2, ctrl_byte_offset + span[1], {
+      end_row = 2, end_col = ctrl_byte_offset + span[2], hl_group = "TurboDebugBarKey",
     })
   end
 
-  -- center highlights (offset by left_text + pad1 bytes)
-  local center_byte_offset = #left_text + pad1
-  click_zones = {}
-  if show_controls then
-    for _, span in ipairs(center_spans) do
-      pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, center_byte_offset + span[1], {
-        end_row = 1, end_col = center_byte_offset + span[2], hl_group = span[3],
-      })
-    end
-    for _, span in ipairs(center_key_spans) do
-      pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, center_byte_offset + span[1], {
-        end_row = 1, end_col = center_byte_offset + span[2], hl_group = "TurboDebugBarKey",
-      })
-    end
-    for _, zone in ipairs(center_zones) do
-      local byte_start = center_byte_offset + zone[1]
-      local byte_end = center_byte_offset + zone[2]
-      local dcol_start = vim.fn.strdisplaywidth(line:sub(1, byte_start))
-      local dcol_end   = vim.fn.strdisplaywidth(line:sub(1, byte_end))
-      click_zones[#click_zones + 1] = { dcol_start, dcol_end, zone[3] }
-    end
+  -- click zones — stored as { line_number_1_based, dcol_start, dcol_end, fn }
+  -- help click lives on row 1 (line 2)
+  local help_dcol_start = vim.fn.strdisplaywidth(state_line:sub(1, help_byte_start))
+  local help_dcol_end   = vim.fn.strdisplaywidth(state_line)
+  click_zones[#click_zones + 1] = { 2, help_dcol_start, help_dcol_end,
+                                     function() require("turbo-debug.help").open() end }
+  -- control clicks live on row 2 (line 3)
+  for _, z in ipairs(ctrl_zones_bytes) do
+    local byte_start = ctrl_byte_offset + z[1]
+    local byte_end = ctrl_byte_offset + z[2]
+    local dcol_start = vim.fn.strdisplaywidth(controls_line:sub(1, byte_start))
+    local dcol_end   = vim.fn.strdisplaywidth(controls_line:sub(1, byte_end))
+    click_zones[#click_zones + 1] = { 3, dcol_start, dcol_end, z[3] }
   end
-
-  -- right zone (help) — single-group highlight across the whole label.
-  -- No special key-hint styling here: the earlier attempt put a misaligned
-  -- TurboDebugBarKey (bold+underline) extmark starting 1 byte INTO the
-  -- emoji's 4 UTF-8 bytes, so when the emoji didn't render at all the
-  -- underline showed up as "_____" after "terminate". Just use the
-  -- standard control highlight on the whole help region — emoji speaks
-  -- for itself.
-  local right_byte_start = #line - #right_text
-  pcall(vim.api.nvim_buf_set_extmark, bar_buf, bar_ns, 1, right_byte_start, {
-    end_row = 1, end_col = #line, hl_group = "TurboDebugBarCtrl",
-  })
-  local help_dcol_start = vim.fn.strdisplaywidth(line:sub(1, right_byte_start))
-  local help_dcol_end   = vim.fn.strdisplaywidth(line)
-  click_zones[#click_zones + 1] = { help_dcol_start, help_dcol_end, help_fn }
 end
 
 local function bar_position()
-  -- 3 rows (─ top, content, ─ bottom). Sits above the statusline.
+  -- 4 rows: ─ top sep / state+help / controls / ─ bottom sep
   local row
   if vim.o.laststatus > 0 then
-    row = vim.o.lines - vim.o.cmdheight - 4  -- 3 (bar) + 1 (statusline)
+    row = vim.o.lines - vim.o.cmdheight - 5  -- 4 (bar) + 1 (statusline)
   else
-    row = vim.o.lines - vim.o.cmdheight - 3  -- 3 (bar)
+    row = vim.o.lines - vim.o.cmdheight - 4  -- 4 (bar)
   end
   if row < 0 then row = 0 end
   return {
@@ -404,7 +378,7 @@ local function bar_position()
     row       = row,
     col       = 0,
     width     = vim.o.columns,
-    height    = 3,
+    height    = 4,
     style     = "minimal",
     border    = "none",
     focusable = false,
@@ -416,12 +390,10 @@ end
 local function handle_bar_click()
   local pos = vim.fn.getmousepos()
   if not pos or pos.winid ~= bar_win then return end
-  -- only the middle (content) row is clickable; top/bottom are separators
-  if pos.line ~= 2 then return end
   local col = pos.wincol - 1
   for _, zone in ipairs(click_zones) do
-    if col >= zone[1] and col < zone[2] then
-      zone[3]()
+    if zone[1] == pos.line and col >= zone[2] and col < zone[3] then
+      zone[4]()
       return
     end
   end
