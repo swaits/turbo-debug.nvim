@@ -43,6 +43,13 @@ local last_dapui_total_height = nil
 -- color. Restored byte-for-byte on M.exit.
 local saved_winsep_hl = nil
 
+-- The user's colorscheme at M.enter time, saved only if `config.opts.
+-- colorscheme` is set and the current colorscheme differs. Restored on
+-- M.exit. Lets the user pin a distinct theme for debug sessions (e.g. a
+-- high-contrast theme for reading register dumps) without permanently
+-- switching their editor.
+local saved_colorscheme = nil
+
 local dapui_initialized = false
 local vt_initialized = false
 
@@ -306,29 +313,53 @@ local function action(name)
   return function() local a = M.actions(); if a[name] then a[name]() end end
 end
 
+-- Returns the user's configured key for an action, or the fallback default
+-- when the user hasn't overridden it. Returns nil when the action is
+-- explicitly disabled (set to `false` in config.opts.keys) — callers should
+-- SKIP rendering a legend entry for that action entirely, since the modal
+-- keymap install path at M._install_for_buf also skips it.
 local function keyof(name, fallback)
   local k = config.opts.keys[name]
-  if type(k) == "string" then return k end
+  if k == false then return nil end
+  if type(k) == "string" and k ~= "" then return k end
   return fallback
 end
 
--- Build a label's byte-level representation.
--- Format: "<icon> (<key>)<tail>[ <italic>]"
---   e.g.  ` (s)tep over`  with `over` styled italic.
+-- Build a control label's byte-level representation.
+--
+-- Picks between two forms based on whether the user's actual key matches
+-- the first letter of the label (case-insensitive):
+--   inline:  "<icon> (<k>)<rest>[ <italic>]"  e.g. "(s)tep over"
+--   prefix:  "<icon> (<k>) <label>[ <italic>]" e.g. "(n) step over"
+--
+-- The inline form is the clean compact presentation for the common case
+-- (default keys match the canonical first letters). The prefix form is
+-- the fallback for users who remap to non-first-letter keys — it still
+-- shows the mnemonic clearly instead of rendering nonsense like "(n)tep".
+--
 -- Returns: text, key_col, key_end_col, italic_col, italic_end_col
 --   (italic_col/italic_end_col are nil when italic is not set).
-local function build_control_text(icon, key, tail, italic)
+local function build_control_text(icon, actual_key, label, italic)
   local parts = {}
   local function add(s) parts[#parts + 1] = s end
   local function col() return #table.concat(parts) end
 
+  local inline = actual_key and label and #actual_key == 1
+                 and #label >= 1
+                 and label:sub(1, 1):lower() == actual_key:lower()
+
   add(icon); add(" ")
   add("(")
   local key_col = col()
-  add(key)
+  add(actual_key)
   local key_end_col = col()
   add(")")
-  add(tail or "")
+  if inline then
+    add(label:sub(2))
+  else
+    add(" ")
+    add(label)
+  end
   local italic_col, italic_end_col
   if italic and italic ~= "" then
     add(" ")
@@ -418,45 +449,56 @@ local function render_cbar()
   local help_text = ICON.help .. " help "
   local help_dw = vim.fn.strdisplaywidth(help_text)
 
-  -- Modal control labels. State-dependent text so the label shows what
+  -- Modal control labels. State-dependent LABEL so the legend shows what
   -- the key will ACTUALLY do right now:
-  --   no session:  (c) start     (q)uit         (Restart hidden)
-  --   active:      (c)ontinue    (q) terminate  (R)estart shown
+  --   no session:  (c) start      (q)uit          (Restart hidden)
+  --   active:      (c)ontinue     (q) terminate   (R)estart shown
+  --
+  -- The KEY shown in parens comes from the user's config (keyof returns
+  -- their override, the default, or nil when explicitly disabled). When
+  -- the key matches the label's first letter, build_control_text renders
+  -- the compact inline form `(s)tep`; when it doesn't, prefix form
+  -- `(n) step`. Disabled actions (keyof returns nil) are omitted entirely.
   local has_session = state ~= "READY"
   local continue_icon = has_session and ICON.go or ICON.start_rkt
-  local continue_tail = has_session and "ontinue" or " start"
-  local quit_tail = has_session and " terminate" or "uit"
+  local continue_label = has_session and "continue" or "start"
+  local terminate_label = has_session and "terminate" or "quit"
 
   local controls = {
-    { icon = continue_icon,  key = keyof("continue",  "c"), tail = continue_tail, italic = nil,    fn = action("continue")  },
-    { icon = ICON.step_over, key = keyof("step_over", "s"), tail = "tep",         italic = "over", fn = action("step_over") },
-    { icon = ICON.step_into, key = keyof("step_into", "d"), tail = "escend",      italic = "into", fn = action("step_into") },
-    { icon = ICON.step_out,  key = keyof("step_out",  "r"), tail = "eturn",       italic = "out",  fn = action("step_out")  },
+    { id = "continue",  icon = continue_icon,  default = "c", label = continue_label, italic = nil,    fn = action("continue")  },
+    { id = "step_over", icon = ICON.step_over, default = "s", label = "step",          italic = "over", fn = action("step_over") },
+    { id = "step_into", icon = ICON.step_into, default = "d", label = "descend",       italic = "into", fn = action("step_into") },
+    { id = "step_out",  icon = ICON.step_out,  default = "r", label = "return",        italic = "out",  fn = action("step_out")  },
   }
   -- (R)estart is only meaningful during an active session
   if has_session then
-    controls[#controls + 1] = { icon = ICON.restart, key = keyof("restart", "R"), tail = "estart", italic = nil, fn = action("restart") }
+    controls[#controls + 1] = { id = "restart", icon = ICON.restart, default = "R", label = "restart", italic = nil, fn = action("restart") }
   end
-  controls[#controls + 1] = { icon = ICON.stop, key = keyof("terminate", "q"), tail = quit_tail, italic = nil, fn = action("terminate") }
+  controls[#controls + 1] = { id = "terminate", icon = ICON.stop, default = "q", label = terminate_label, italic = nil, fn = action("terminate") }
 
   local gap = "   "
   local function build_controls(include_italic)
     local parts, spans, key_spans, italic_spans, zones = {}, {}, {}, {}, {}
-    for i, c in ipairs(controls) do
-      local prefix_len = #table.concat(parts)
-      if i > 1 then
-        parts[#parts + 1] = gap
-        prefix_len = prefix_len + #gap
+    local emitted = 0
+    for _, c in ipairs(controls) do
+      local actual_key = keyof(c.id, c.default)
+      if actual_key then
+        local prefix_len = #table.concat(parts)
+        if emitted > 0 then
+          parts[#parts + 1] = gap
+          prefix_len = prefix_len + #gap
+        end
+        emitted = emitted + 1
+        local italic_text = include_italic and c.italic or nil
+        local txt, kcol, kend, icol, iend = build_control_text(c.icon, actual_key, c.label, italic_text)
+        parts[#parts + 1] = txt
+        spans[#spans + 1] = { prefix_len, prefix_len + #txt, "TurboDebugBarCtrl" }
+        key_spans[#key_spans + 1] = { prefix_len + kcol, prefix_len + kend }
+        if icol then
+          italic_spans[#italic_spans + 1] = { prefix_len + icol, prefix_len + iend }
+        end
+        zones[#zones + 1] = { prefix_len, prefix_len + #txt, c.fn }
       end
-      local italic_text = include_italic and c.italic or nil
-      local txt, kcol, kend, icol, iend = build_control_text(c.icon, c.key, c.tail, italic_text)
-      parts[#parts + 1] = txt
-      spans[#spans + 1] = { prefix_len, prefix_len + #txt, "TurboDebugBarCtrl" }
-      key_spans[#key_spans + 1] = { prefix_len + kcol, prefix_len + kend }
-      if icol then
-        italic_spans[#italic_spans + 1] = { prefix_len + icol, prefix_len + iend }
-      end
-      zones[#zones + 1] = { prefix_len, prefix_len + #txt, c.fn }
     end
     return table.concat(parts), spans, key_spans, italic_spans, zones
   end
@@ -896,14 +938,28 @@ local function ensure_dapui()
     end
   end
 
-  -- re-render the control bar on any dap state change so the READY/RUNNING/
+  -- re-render the bars on any dap state change so the READY/RUNNING/
   -- PAUSED chip and dap.status() text stay live.
+  --
+  -- `dap.status()` is a queue-backed message poller (see
+  -- nvim-dap/lua/dap/progress.lua): each call drains ONE message from
+  -- the circular buffer, or returns the last-drained message if the
+  -- queue is empty. To keep the status string current, we must poll
+  -- on every `User DapProgressUpdate` autocmd — nvim-dap fires that
+  -- every time it reports a new state string. Listening only to
+  -- event_stopped/event_continued leaves queued messages behind and
+  -- the bar shows stale state until the next render.
   local function refresh_bars() vim.schedule(render_bars) end
   dap.listeners.after.event_initialized["turbo-debug-bar"]  = refresh_bars
   dap.listeners.after.event_stopped["turbo-debug-bar"]      = refresh_bars
   dap.listeners.after.event_continued["turbo-debug-bar"]    = refresh_bars
   dap.listeners.after.event_terminated["turbo-debug-bar"]   = refresh_bars
   dap.listeners.after.event_exited["turbo-debug-bar"]       = refresh_bars
+  vim.api.nvim_create_autocmd("User", {
+    pattern = "DapProgressUpdate",
+    group = vim.api.nvim_create_augroup("TurboDebugDapProgress", { clear = true }),
+    callback = refresh_bars,
+  })
 
   -- When a stopped event fires, dap will jump to the source frame using
   -- its switchbuf logic. `uselast` (the common default) targets the
@@ -1275,6 +1331,13 @@ end
 function M.enter()
   if active then return end
   active = true
+  -- Switch colorscheme BEFORE define_highlights so the TurboDebug*
+  -- highlights derive their colors from the debug-mode theme.
+  if type(config.opts.colorscheme) == "string" and config.opts.colorscheme ~= ""
+     and vim.g.colors_name ~= config.opts.colorscheme then
+    saved_colorscheme = vim.g.colors_name
+    pcall(vim.cmd.colorscheme, config.opts.colorscheme)
+  end
   define_highlights()
   setup_actions()
 
@@ -1404,6 +1467,10 @@ function M.exit()
   if saved_winsep_hl ~= nil then
     pcall(vim.api.nvim_set_hl, 0, "WinSeparator", saved_winsep_hl)
     saved_winsep_hl = nil
+  end
+  if saved_colorscheme ~= nil and saved_colorscheme ~= "" then
+    pcall(vim.cmd.colorscheme, saved_colorscheme)
+    saved_colorscheme = nil
   end
 end
 

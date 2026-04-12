@@ -62,6 +62,12 @@ M.defaults = {
   -- sidebar position: "left" (default) or "right"
   sidebar = "left",
 
+  -- Optional colorscheme to switch to while debug mode is active.
+  -- `nil` (default) keeps the user's current colorscheme. Any other
+  -- string value is passed directly to `:colorscheme`. On M.exit the
+  -- previous colorscheme is restored.
+  colorscheme = nil,
+
   -- highlight the active dapui pane's border/separator vs. dim inactive panes
   active_window_highlight = true,
 
