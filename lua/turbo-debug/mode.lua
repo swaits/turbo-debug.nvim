@@ -1087,7 +1087,32 @@ function M.enter()
   })
   vim.api.nvim_create_autocmd("VimResized", {
     group = group,
-    callback = reposition_bars,
+    callback = function()
+      -- Defer via vim.schedule so our pin runs AFTER any other plugin's
+      -- VimResized handler in the same event-loop tick. The user has
+      -- tiny-equalizer.nvim which runs `tabdo wincmd =` on VimResized,
+      -- equalizing every window — that fights our explicit sizing. By
+      -- re-asserting after them, we restore the layout.
+      vim.schedule(reposition_bars)
+    end,
+  })
+  -- WinResized fires on any individual window resize (including user
+  -- mouse-drags on separators, or `wincmd =` from other plugins). We
+  -- re-pin defensively so intentional user resizes stick but drive-by
+  -- equalizer plugins don't wipe our layout.
+  vim.api.nvim_create_autocmd("WinResized", {
+    group = group,
+    callback = function()
+      -- Only respond to resizes we DIDN'T initiate. Guard with a flag
+      -- so our own pin_dapui_sizes doesn't trigger an infinite loop.
+      if M._pinning then return end
+      vim.schedule(function()
+        if not active then return end
+        M._pinning = true
+        pin_dapui_sizes()
+        M._pinning = false
+      end)
+    end,
   })
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_loaded(buf) then M._install_for_buf(buf) end
