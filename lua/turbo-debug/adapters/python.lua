@@ -2,31 +2,22 @@ local loader = require("turbo-debug.adapters.init")
 
 local M = {}
 
+-- Try in order: active virtualenv, conda, common local venv dirs, system.
+-- First executable match wins. Using a single ordered list keeps the probe
+-- sequence explicit (ipairs preserves numeric order).
 local function find_python()
-  -- check active virtualenv
-  local venv = vim.env.VIRTUAL_ENV
-  if venv then
-    local path = venv .. "/bin/python"
-    if vim.fn.executable(path) == 1 then return path end
-  end
-
-  -- check conda
-  local conda = vim.env.CONDA_PREFIX
-  if conda then
-    local path = conda .. "/bin/python"
-    if vim.fn.executable(path) == 1 then return path end
-  end
-
-  -- probe common venv directories relative to cwd
+  local candidates = {}
+  if vim.env.VIRTUAL_ENV then candidates[#candidates + 1] = vim.env.VIRTUAL_ENV .. "/bin/python" end
+  if vim.env.CONDA_PREFIX then candidates[#candidates + 1] = vim.env.CONDA_PREFIX .. "/bin/python" end
   local cwd = vim.fn.getcwd()
   for _, dir in ipairs({ ".venv", "venv", "env", ".env" }) do
-    local path = cwd .. "/" .. dir .. "/bin/python"
-    if vim.fn.executable(path) == 1 then return path end
+    candidates[#candidates + 1] = cwd .. "/" .. dir .. "/bin/python"
   end
-
-  -- fallback to system python
-  if vim.fn.executable("python3") == 1 then return "python3" end
-  if vim.fn.executable("python") == 1 then return "python" end
+  candidates[#candidates + 1] = "python3"
+  candidates[#candidates + 1] = "python"
+  for _, p in ipairs(candidates) do
+    if vim.fn.executable(p) == 1 then return p end
+  end
   return nil
 end
 

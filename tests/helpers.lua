@@ -6,4 +6,16 @@ function M.assert_eq(a, b, msg)
   end
 end
 
+function M.assert_true(v, msg)
+  if not v then
+    error(string.format("FAIL: %s — expected truthy, got %s", msg, vim.inspect(v)))
+  end
+end
+
+function M.assert_false(v, msg)
+  if v then
+    error(string.format("FAIL: %s — expected falsy, got %s", msg, vim.inspect(v)))
+  end
+end
+
 return M

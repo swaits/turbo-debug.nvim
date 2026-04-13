@@ -42,11 +42,18 @@ function M.setup()
   --   ⭕ U+2B55  heavy large circle      = rejected breakpoint
   --   👉 U+1F449 backhand pointing right = current execution line (IP)
   --   📝 U+1F4DD memo                    = log point
-  vim.fn.sign_define("DapBreakpoint",          { text = "\xf0\x9f\x94\xb4", texthl = "DapBreakpoint",          numhl = "DapBreakpoint" })
-  vim.fn.sign_define("DapBreakpointCondition", { text = "\xf0\x9f\x9f\xa1", texthl = "DapBreakpointCondition", numhl = "DapBreakpointCondition" })
-  vim.fn.sign_define("DapBreakpointRejected",  { text = "\xe2\xad\x95",     texthl = "DapBreakpointRejected",  numhl = "DapBreakpointRejected" })
-  vim.fn.sign_define("DapStopped",             { text = "\xf0\x9f\x91\x89", texthl = "DapStopped", linehl = "DapStoppedLine", numhl = "DapStopped" })
-  vim.fn.sign_define("DapLogPoint",            { text = "\xf0\x9f\x93\x9d", texthl = "DapLogPoint",            numhl = "DapLogPoint" })
+  local signs = {
+    { "DapBreakpoint",          "\xf0\x9f\x94\xb4" },
+    { "DapBreakpointCondition", "\xf0\x9f\x9f\xa1" },
+    { "DapBreakpointRejected",  "\xe2\xad\x95"     },
+    { "DapStopped",             "\xf0\x9f\x91\x89", { linehl = "DapStoppedLine" } },
+    { "DapLogPoint",            "\xf0\x9f\x93\x9d" },
+  }
+  for _, s in ipairs(signs) do
+    local spec = { text = s[2], texthl = s[1], numhl = s[1] }
+    if s[3] then for k, v in pairs(s[3]) do spec[k] = v end end
+    vim.fn.sign_define(s[1], spec)
+  end
 
   -- unobtrusive inline virtual text: italic, comment-colored
   vim.api.nvim_set_hl(0, "NvimDapVirtualText", { default = true, link = "Comment", italic = true })
