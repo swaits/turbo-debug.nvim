@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.2 — 2026-04-12
+
+Bug-fix release: Python program output now shows in the Console pane, and
+breakpoints restore for files opened on the command line.
+
+### Fixed
+
+- **Python `print()` output appears in the Console pane.** The debugpy
+  launch config now sets `console = "integratedTerminal"`, so debugpy
+  routes stdout/stderr via `RunInTerminalRequest` into dapui's Console
+  buffer (which is already registered as
+  `dap.defaults.fallback.terminal_win_cmd`). Previously debugpy defaulted
+  to `internalConsole` and emitted `OutputEvent`s that nvim-dap forwards
+  to the REPL buffer — which turbo-debug's layout deliberately omits, so
+  program output vanished. Interactive `input()` now also works.
+- **Breakpoints restore for files opened on the command line.** `nvim
+  foo.py` fires `BufReadPost` for `foo.py` before turbo-debug's deferred
+  `setup()` runs, so `persistent-breakpoints.nvim`'s `BufReadPost`
+  autocmd missed the startup buffer and saved breakpoints never came
+  back. After setup, turbo-debug now sweeps already-loaded buffers once
+  via `load_breakpoints()` (idempotent; placed after `sign_define` so
+  the first paint uses turbo-debug's emoji signs instead of dap's
+  default `B`).
+
 ## 0.2.1 — 2026-04-12
 
 Language coverage release. 10 new DAP adapters bring built-in support from
