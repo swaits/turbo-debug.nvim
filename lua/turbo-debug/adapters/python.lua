@@ -36,6 +36,14 @@ function M.register(dap)
       name = "Launch file",
       program = "${file}",
       pythonPath = function() return find_python() end,
+      -- integratedTerminal routes the program via RunInTerminalRequest,
+      -- which nvim-dap spawns in a terminal buffer. dapui registers its
+      -- Console element as `dap.defaults.fallback.terminal_win_cmd`, so
+      -- stdout/stderr land in the visible Console pane. Default
+      -- (internalConsole) sends OutputEvents that nvim-dap routes to the
+      -- REPL buffer — which turbo-debug's layout deliberately omits, so
+      -- print() output vanishes. `input()` also works under this mode.
+      console = "integratedTerminal",
     },
   }, { "python" })
 end

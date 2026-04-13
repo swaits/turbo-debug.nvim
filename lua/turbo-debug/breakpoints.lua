@@ -61,6 +61,16 @@ function M.setup()
     vim.fn.sign_define(s[1], spec)
   end
 
+  -- persistent-breakpoints.setup() only installs its BufReadPost autocmd —
+  -- for files opened from the command line (`nvim foo.py`), BufReadPost has
+  -- already fired before our deferred plugin/turbo-debug.lua setup runs, so
+  -- the autocmd misses the startup buffer and saved breakpoints never
+  -- reappear. load_breakpoints() iterates all listed buffers and is
+  -- idempotent, so one post-sign_define sweep catches the missed ones
+  -- without a flicker of dap's default 'B' sign. Placed after sign_define
+  -- so the restored breakpoints render with our emoji from the first paint.
+  pcall(require("persistent-breakpoints.api").load_breakpoints)
+
   -- unobtrusive inline virtual text: italic, comment-colored
   vim.api.nvim_set_hl(0, "NvimDapVirtualText", { default = true, link = "Comment", italic = true })
   vim.api.nvim_set_hl(0, "NvimDapVirtualTextChanged", { default = true, link = "DiagnosticWarn", italic = true })
