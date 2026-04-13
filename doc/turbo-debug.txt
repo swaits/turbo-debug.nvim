@@ -32,7 +32,7 @@ Features:
 - Floating REPL eval (|E|)
 - Floating status bar + control bar chrome (independent of any statusline
   plugin)
-- Zero-config adapters for 12 languages
+- Zero-config adapters for 22 languages
 - Theme-agnostic colors (every highlight links to a standard group)
 
 ==============================================================================
@@ -332,11 +332,22 @@ Built-in adapter support (adapter binary must be installed):
   C/C++            codelldb         codelldb
   Rust             codelldb         codelldb
   Swift            codelldb         codelldb
+  Zig              codelldb         codelldb
+  Nim              codelldb         codelldb
+  Crystal          codelldb         codelldb
   C#               netcoredbg       netcoredbg
+  F#               netcoredbg       netcoredbg
   Java             java-debug       java-debug-adapter
   Kotlin           kotlin-debug     kotlin-debug-adapter
   PHP              php-debug        php-debug-adapter
   Ruby             rdbg             rdbg
+  Dart             dart-debug       dart debug_adapter
+  Flutter          flutter-debug    flutter debug_adapter
+  Bash / Sh        bash-debug       bash-debug-adapter
+  Elixir           elixir-ls        elixir-ls-debugger
+  Haskell          haskell-debug    haskell-debug-adapter
+  OCaml            earlybird        ocamlearlybird
+  R                vscDebugger      R (with vscDebugger pkg)
   Lua (Neovim)     osv              one-small-step-for-vimkind
 
 Path resolution order:
@@ -349,6 +360,15 @@ and picks the binary via `vim.ui.select` if multiple artifacts exist.
 
 Python auto-detects virtualenvs: `VIRTUAL_ENV`, `CONDA_PREFIX`, then the
 common directories `.venv`, `venv`, `env`, `.env` relative to `cwd`.
+
+Dart auto-detects Flutter: if `flutter` is on PATH alongside `dart`, a
+"Launch Flutter app" configuration is added to the `dart` filetype in
+addition to the plain Dart file launch.
+
+R requires the `vscDebugger` R package. turbo-debug preflights it via
+`Rscript` and silently skips registration if the package is missing. Install
+with `install.packages("vscDebugger")` or
+`remotes::install_github("ManuelHentschel/vscDebugger")`.
 
 Adapter binaries are the user's responsibility to install (mason.nvim is
 the easiest route).

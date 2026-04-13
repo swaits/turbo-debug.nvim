@@ -180,21 +180,33 @@ Both bars:
 
 ## Supported Languages
 
-turbo-debug ships adapter configs for 12 languages. You install the adapter
+turbo-debug ships adapter configs for 22 languages. You install the adapter
 binary (via [mason.nvim](https://github.com/williamboman/mason.nvim), your
 package manager, or manually) — turbo-debug handles all the configuration.
 
 | Language | Adapter | Language | Adapter |
 |----------|---------|----------|---------|
 | Python | debugpy | C# | netcoredbg |
-| JavaScript / TS | js-debug | Java | java-debug-adapter |
-| Go | delve | Kotlin | kotlin-debug |
-| C / C++ | codelldb | PHP | php-debug |
-| Rust | codelldb | Ruby | rdbg |
-| Swift | codelldb | Lua (Neovim) | osv |
+| JavaScript / TS | js-debug | F# | netcoredbg |
+| Go | delve | Java | java-debug-adapter |
+| C / C++ | codelldb | Kotlin | kotlin-debug |
+| Rust | codelldb | PHP | php-debug |
+| Swift | codelldb | Ruby | rdbg |
+| Zig | codelldb | Elixir | elixir-ls |
+| Nim | codelldb | Haskell | haskell-debug-adapter |
+| Crystal | codelldb | OCaml | ocamlearlybird |
+| Dart / Flutter | dart-debug | R | vscDebugger |
+| Bash / Sh | bash-debug-adapter | Lua (Neovim) | osv |
 
-Rust gets special treatment: pressing `c` runs `cargo build` automatically
-and picks the binary via `vim.ui.select`.
+Special treatment:
+- **Rust**: pressing `c` runs `cargo build` automatically and picks the
+  binary via `vim.ui.select`.
+- **Python**: auto-detects virtualenvs (`VIRTUAL_ENV`, `CONDA_PREFIX`,
+  `.venv`, `venv`, `env`, `.env`).
+- **Dart**: if `flutter` is on PATH, a "Launch Flutter app" configuration
+  is added alongside the plain Dart file launch.
+- **R**: preflights that the `vscDebugger` R package is installed; silently
+  skips registration if missing.
 
 ## What This Plugin Actually Does
 

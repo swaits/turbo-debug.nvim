@@ -38,7 +38,7 @@ local function register_simple_adapters(dap)
           program = function() return vim.fn.input("Path to DLL: ", vim.fn.getcwd() .. "/bin/Debug/", "file") end,
         },
       },
-      { "cs" },
+      { "cs", "fsharp" },
     },
 
     {
@@ -119,6 +119,77 @@ local function register_simple_adapters(dap)
       },
       { "ruby" },
     },
+
+    {
+      "mix_task",
+      {
+        "elixir-ls-debugger",
+        "elixir-ls-debug-adapter",
+        vim.fn.stdpath("data") .. "/mason/packages/elixir-ls/debugger.sh",
+      },
+      {
+        type = "executable",
+      },
+      {
+        {
+          type = "mix_task",
+          request = "launch",
+          name = "mix test",
+          task = "test",
+          taskArgs = { "--trace" },
+          startApps = true,
+          projectDir = "${workspaceFolder}",
+          requireFiles = { "test/**/test_helper.exs", "test/**/*_test.exs" },
+        },
+      },
+      { "elixir" },
+    },
+
+    {
+      "haskell",
+      { "haskell-debug-adapter" },
+      {
+        type = "executable",
+      },
+      {
+        {
+          type = "haskell",
+          request = "launch",
+          name = "Launch file",
+          workspace = "${workspaceFolder}",
+          startup = "${file}",
+          stopOnEntry = true,
+          logFile = vim.fn.stdpath("data") .. "/haskell-dap.log",
+          logLevel = "WARNING",
+          ghciEnv = vim.empty_dict(),
+          ghciPrompt = "H>>= ",
+          ghciInitialPrompt = "Prelude>",
+          ghciCmd = "cabal exec -- ghci-dap --interactive -i -i${workspaceFolder}",
+        },
+      },
+      { "haskell" },
+    },
+
+    {
+      "ocamlearlybird",
+      { "ocamlearlybird" },
+      {
+        type = "executable",
+        args = { "debug" },
+      },
+      {
+        {
+          type = "ocamlearlybird",
+          request = "launch",
+          name = "Launch bytecode",
+          program = function()
+            return vim.fn.input("Path to bytecode: ", vim.fn.getcwd() .. "/_build/default/", "file")
+          end,
+          stopOnEntry = false,
+        },
+      },
+      { "ocaml" },
+    },
   }
 
   for _, s in ipairs(simple) do
@@ -153,7 +224,7 @@ function M.setup()
   local dap = require("dap")
 
   -- load adapters with non-trivial logic from separate files
-  for _, name in ipairs({ "python", "go", "c", "javascript" }) do
+  for _, name in ipairs({ "python", "go", "c", "javascript", "dart", "bash", "r" }) do
     local ok, adapter_mod = pcall(require, "turbo-debug.adapters." .. name)
     if ok and adapter_mod.register then adapter_mod.register(dap) end
   end

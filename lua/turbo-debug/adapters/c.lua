@@ -62,7 +62,7 @@ function M.register(dap)
       cwd = "${workspaceFolder}",
     },
   }
-  for _, ft in ipairs({ "c", "cpp", "swift" }) do
+  for _, ft in ipairs({ "c", "cpp", "swift", "zig", "nim", "crystal" }) do
     dap.configurations[ft] = dap.configurations[ft] or prompt_config
   end
 

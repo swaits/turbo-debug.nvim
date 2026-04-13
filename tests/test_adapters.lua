@@ -9,7 +9,7 @@ assert_eq(loader.find_executable({ "totally-fake-binary-xyz" }), nil, "non-exist
 assert_eq(loader.find_executable({ "sh" }) ~= nil, true, "find_executable finds sh")
 
 -- all adapter modules load and have register()
-for _, name in ipairs({ "python", "go", "c", "javascript" }) do
+for _, name in ipairs({ "python", "go", "c", "javascript", "dart", "bash", "r" }) do
   assert_eq(type(require("turbo-debug.adapters." .. name).register), "function", name .. " has register()")
 end
 
