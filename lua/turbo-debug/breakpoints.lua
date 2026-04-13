@@ -2,12 +2,26 @@ local config = require("turbo-debug.config")
 
 local M = {}
 
-local initialized = false
-
+-- This function is idempotent — every operation inside is safe to re-run.
+-- That property matters because turbo-debug.setup() can get called twice in
+-- practice:
+--   (1) Deferred auto-setup from plugin/turbo-debug.lua, which runs after
+--       vim.pack.add has finished registering all deps in runtimepath. The
+--       defer is necessary — calling setup synchronously during
+--       vim.pack.add would try to `require('persistent-breakpoints.api')`
+--       before the plugin's lua/ directory is on the runtimepath and
+--       crash with "module not found".
+--   (2) User's explicit setup({...}) in their init.lua with config
+--       overrides. It runs immediately (before the deferred auto-setup).
+--
+-- Previously a single `initialized` flag guarded this function so it only
+-- ran once. That guard was fragile: if the first call errored partway
+-- (case above), the flag was set but the setup was incomplete, and the
+-- second call skipped the retry. We now let every call do its full work;
+-- persistent-breakpoints.setup re-reads its bps file, sign_define overrides
+-- a previous definition, nvim_set_hl overrides a previous link, and
+-- vim.keymap.set overrides a previous binding.
 function M.setup()
-  if initialized then return end
-  initialized = true
-
   require("persistent-breakpoints").setup({
     load_breakpoints_event = { "BufReadPost" },
   })
