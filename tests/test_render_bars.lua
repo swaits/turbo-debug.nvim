@@ -21,14 +21,10 @@ local function make_bar_win()
 end
 
 local function cleanup(win)
-  if win and vim.api.nvim_win_is_valid(win) then
-    pcall(vim.api.nvim_win_close, win, true)
-  end
+  if win and vim.api.nvim_win_is_valid(win) then pcall(vim.api.nvim_win_close, win, true) end
 end
 
-local function line(buf, i)
-  return vim.api.nvim_buf_get_lines(buf, i, i + 1, false)[1] or ""
-end
+local function line(buf, i) return vim.api.nvim_buf_get_lines(buf, i, i + 1, false)[1] or "" end
 
 -- build_control_text -------------------------------------------------------
 
@@ -120,8 +116,10 @@ do
   local content = line(buf, 0)
   -- italic qualifiers are "over", "into", "out" — on overflow they're omitted.
   -- At width 25 with 5+ controls, there's no way they all fit with italics.
-  assert_false(content:find(" over ") or content:find(" into ") or content:find(" out "),
-    "overflow: italic qualifiers absent at narrow width")
+  assert_false(
+    content:find(" over ") or content:find(" into ") or content:find(" out "),
+    "overflow: italic qualifiers absent at narrow width"
+  )
   mode._test.set_bars(nil, nil, nil, nil)
   cleanup(win)
 end

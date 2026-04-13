@@ -76,8 +76,8 @@ M.defaults = {
     -- ▾ U+25BE down-triangle (expanded), ▸ U+25B8 right-triangle (collapsed),
     -- ▶ U+25B6 right-pointing triangle (current frame / play-head)
     icons = {
-      expanded      = "\xe2\x96\xbe",
-      collapsed     = "\xe2\x96\xb8",
+      expanded = "\xe2\x96\xbe",
+      collapsed = "\xe2\x96\xb8",
       current_frame = "\xe2\x96\xb6",
     },
     controls = {
@@ -86,14 +86,14 @@ M.defaults = {
       -- ▶ play, ⏸ pause, ⤓ step-into, ⇒ step-over, ⤒ step-out, ↶ step-back,
       -- ↻ run-last, ■ terminate, ⊗ disconnect
       icons = {
-        play       = "\xe2\x96\xb6",
-        pause      = "\xe2\x8f\xb8",
-        step_into  = "\xe2\xa4\x93",
-        step_over  = "\xe2\x87\x92",
-        step_out   = "\xe2\xa4\x92",
-        step_back  = "\xe2\x86\xb6",
-        run_last   = "\xe2\x86\xbb",
-        terminate  = "\xe2\x96\xa0",
+        play = "\xe2\x96\xb6",
+        pause = "\xe2\x8f\xb8",
+        step_into = "\xe2\xa4\x93",
+        step_over = "\xe2\x87\x92",
+        step_out = "\xe2\xa4\x92",
+        step_back = "\xe2\x86\xb6",
+        run_last = "\xe2\x86\xbb",
+        terminate = "\xe2\x96\xa0",
         disconnect = "\xe2\x8a\x97",
       },
     },

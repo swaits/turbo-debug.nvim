@@ -57,6 +57,7 @@ local vt_initialized = false
 -- All in the PUA range U+EA60..U+EC1E. Encoded as UTF-8 bytes so the source
 -- file stays ASCII through any tool pipeline that strips PUA codepoints.
 
+-- stylua: ignore start
 local ICON = {
   -- Control-bar emoji — strictly supplementary-plane (U+1F000+) or
   -- standalone-emoji-default (like 🛑) codepoints. No VS16-dependent
@@ -105,6 +106,7 @@ local ICON = {
   wrap_mark   = "\xe2\x86\xb3",                 -- ↳ downward arrow w/ tip right
   hline       = "\xe2\x94\x80",                 -- ─ light horizontal
 }
+-- stylua: ignore end
 
 -- ─── layout ──────────────────────────────────────────────────────────────────
 
@@ -114,8 +116,7 @@ local function build_default_layouts()
   -- Console height: max(8 rows, 20% of total editor lines). More
   -- generous than the previous 15% — user reported the Console kept
   -- feeling "laughably small" so we're allocating real estate.
-  local console_size = config.opts.console_height
-                       or math.max(8, math.floor(vim.o.lines * 0.2))
+  local console_size = config.opts.console_height or math.max(8, math.floor(vim.o.lines * 0.2))
 
   -- Sidebar width: ideal 40 cols, never less than 25, never more than 1/3
   -- of tty width. Scales down gracefully on narrow terminals, stops at 40
@@ -129,9 +130,9 @@ local function build_default_layouts()
       -- Order: Call Stack → Scopes → Watches → Breakpoints.
       -- Equal 25% share per user preference.
       elements = {
-        { id = "stacks",      size = 0.25 },
-        { id = "scopes",      size = 0.25 },
-        { id = "watches",     size = 0.25 },
+        { id = "stacks", size = 0.25 },
+        { id = "scopes", size = 0.25 },
+        { id = "watches", size = 0.25 },
         { id = "breakpoints", size = 0.25 },
       },
     },
@@ -151,14 +152,14 @@ end
 
 local function define_highlights()
   local hl = vim.api.nvim_set_hl
-  hl(0, "TurboDebugBorderActive",   { default = true, link = "Function" })
+  hl(0, "TurboDebugBorderActive", { default = true, link = "Function" })
   hl(0, "TurboDebugBorderInactive", { default = true, link = "Comment" })
-  hl(0, "TurboDebugWinbar",         { default = true, link = "DiagnosticError" })
+  hl(0, "TurboDebugWinbar", { default = true, link = "DiagnosticError" })
   -- Bar background: link to Normal so the bar blends with dapui's own
   -- pane borders (which use Normal or WinBar — both share the editor's
   -- default background). StatusLine was too dark and created a visible
   -- seam between the bar and the surrounding panes.
-  hl(0, "TurboDebugBar",            { default = true, link = "Normal" })
+  hl(0, "TurboDebugBar", { default = true, link = "Normal" })
   -- Bar separator: fg derived from WinBar.fg at runtime so it matches
   -- whatever color the user's theme uses for pane-title chrome
   -- (dapui renders each pane's title in its winbar, so this is
@@ -168,17 +169,17 @@ local function define_highlights()
   --
   -- Placeholder link so the group exists as a sane default even
   -- before the derive runs.
-  hl(0, "TurboDebugBarSeparator",   { default = true, link = "WinSeparator" })
+  hl(0, "TurboDebugBarSeparator", { default = true, link = "WinSeparator" })
   -- Control labels: link to Normal so the text blends with the bar's
   -- Normal-bg surface. StatusLine bg was creating a visible color patch
   -- behind each label. The key letter still pops via TurboDebugBarKey
   -- (Special fg, bold), and icons carry their own emoji color.
-  hl(0, "TurboDebugBarCtrl",        { default = true, link = "Normal" })
-  hl(0, "TurboDebugBarStatus",      { default = true, link = "Comment" })
-  hl(0, "TurboDebugBarBrand",       { default = true, link = "Title" })
-  hl(0, "TurboDebugBarReady",       { default = true, link = "DiagnosticHint" })
-  hl(0, "TurboDebugBarRunning",     { default = true, link = "DiagnosticInfo" })
-  hl(0, "TurboDebugBarPaused",      { default = true, link = "DiagnosticError" })
+  hl(0, "TurboDebugBarCtrl", { default = true, link = "Normal" })
+  hl(0, "TurboDebugBarStatus", { default = true, link = "Comment" })
+  hl(0, "TurboDebugBarBrand", { default = true, link = "Title" })
+  hl(0, "TurboDebugBarReady", { default = true, link = "DiagnosticHint" })
+  hl(0, "TurboDebugBarRunning", { default = true, link = "DiagnosticInfo" })
+  hl(0, "TurboDebugBarPaused", { default = true, link = "DiagnosticError" })
   -- Italic qualifier words ("over", "into", "out") shown after the
   -- step/descend/return labels. Subordinate styling: Comment fg + italic,
   -- so the key label ("(s)tep") reads primary and the qualifier ("over")
@@ -191,7 +192,9 @@ local function define_highlights()
       return
     end
     vim.api.nvim_set_hl(0, "TurboDebugBarItalic", {
-      fg = src.fg, italic = true, default = true,
+      fg = src.fg,
+      italic = true,
+      default = true,
     })
   end
   local function install_cs_listener(name, fn)
@@ -215,7 +218,10 @@ local function define_highlights()
       return
     end
     vim.api.nvim_set_hl(0, "TurboDebugBarKey", {
-      fg = src.fg, bg = src.bg, bold = true, default = true,
+      fg = src.fg,
+      bg = src.bg,
+      bold = true,
+      default = true,
     })
   end
   install_cs_listener("TurboDebugBarKeyHL", apply_key_hl)
@@ -256,8 +262,10 @@ end
 -- forces the pane's winbar row to stay bright even when the pane is
 -- unfocused (nvim renders unfocused wins with WinBarNC). Nordfox happens to
 -- make them identical; other themes don't.
-local DAPUI_WINHL_ACTIVE = "WinBar:WinBar,WinBarNC:WinBar,WinSeparator:TurboDebugBorderActive,FloatBorder:TurboDebugBorderActive"
-local DAPUI_WINHL_INACTIVE = "WinBar:WinBar,WinBarNC:WinBar,WinSeparator:TurboDebugBorderInactive,FloatBorder:TurboDebugBorderInactive"
+local DAPUI_WINHL_ACTIVE =
+  "WinBar:WinBar,WinBarNC:WinBar,WinSeparator:TurboDebugBorderActive,FloatBorder:TurboDebugBorderActive"
+local DAPUI_WINHL_INACTIVE =
+  "WinBar:WinBar,WinBarNC:WinBar,WinSeparator:TurboDebugBorderInactive,FloatBorder:TurboDebugBorderInactive"
 
 local function setup_active_win_highlights()
   local active_hl = DAPUI_WINHL_ACTIVE
@@ -267,9 +275,7 @@ local function setup_active_win_highlights()
   local function apply(win, hl)
     if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_config(win).relative == "" then
       local ft = vim.bo[vim.api.nvim_win_get_buf(win)].filetype or ""
-      if ft:match("^dapui_") or ft == "dap-repl" then
-        vim.wo[win].winhighlight = hl
-      end
+      if ft:match("^dapui_") or ft == "dap-repl" then vim.wo[win].winhighlight = hl end
     end
   end
   vim.api.nvim_create_autocmd("WinEnter", {
@@ -299,8 +305,12 @@ local function buf_ok(b) return b and vim.api.nvim_buf_is_valid(b) end
 -- setup_active_win_highlights / the FileType autocmd, and different from
 -- schedule_console_redraw's `dapui_console` single-check — don't unify.
 local DAPUI_PANE_FTS = {
-  dapui_stacks = true, dapui_scopes = true, dapui_watches = true,
-  dapui_breakpoints = true, dapui_console = true, ["dap-repl"] = true,
+  dapui_stacks = true,
+  dapui_scopes = true,
+  dapui_watches = true,
+  dapui_breakpoints = true,
+  dapui_console = true,
+  ["dap-repl"] = true,
 }
 local function is_dapui_pane_ft(ft) return ft ~= nil and DAPUI_PANE_FTS[ft] == true end
 
@@ -317,9 +327,7 @@ local function for_each_dapui_pane(cb)
 end
 
 -- Bar extmarks go through bar_ns + pcall. IP marker uses ip_ns separately.
-local function safe_extmark(buf, row, col, opts)
-  pcall(vim.api.nvim_buf_set_extmark, buf, bar_ns, row, col, opts)
-end
+local function safe_extmark(buf, row, col, opts) pcall(vim.api.nvim_buf_set_extmark, buf, bar_ns, row, col, opts) end
 
 local function bar_set_lines(buf, lines)
   vim.bo[buf].modifiable = true
@@ -332,12 +340,18 @@ local function safe_set_height(w, h) pcall(vim.api.nvim_win_set_height, w, h) en
 -- Defer fn via vim.schedule; re-check `active` at fire time so the body
 -- doesn't run after M.exit cleared state.
 local function if_still_active(fn)
-  vim.schedule(function() if active then fn() end end)
+  vim.schedule(function()
+    if active then fn() end
+  end)
 end
 
 local function invalidate_dead_bars()
-  if not win_ok(sbar_win) then sbar_win, sbar_buf = nil, nil end
-  if not win_ok(cbar_win) then cbar_win, cbar_buf = nil, nil end
+  if not win_ok(sbar_win) then
+    sbar_win, sbar_buf = nil, nil
+  end
+  if not win_ok(cbar_win) then
+    cbar_win, cbar_buf = nil, nil
+  end
 end
 
 -- click zones for the control bar. Each entry: { line_1based, dcol_start, dcol_end, fn }
@@ -354,7 +368,10 @@ local function dap_state()
 end
 
 local function action(name)
-  return function() local a = M.actions(); if a[name] then a[name]() end end
+  return function()
+    local a = M.actions()
+    if a[name] then a[name]() end
+  end
 end
 
 -- Returns the user's configured key for an action, or the fallback default
@@ -388,11 +405,14 @@ local function build_control_text(icon, actual_key, label, italic)
   local function add(s) parts[#parts + 1] = s end
   local function col() return #table.concat(parts) end
 
-  local inline = actual_key and label and #actual_key == 1
-                 and #label >= 1
-                 and label:sub(1, 1):lower() == actual_key:lower()
+  local inline = actual_key
+    and label
+    and #actual_key == 1
+    and #label >= 1
+    and label:sub(1, 1):lower() == actual_key:lower()
 
-  add(icon); add(" ")
+  add(icon)
+  add(" ")
   add("(")
   local key_col = col()
   add(actual_key)
@@ -459,21 +479,29 @@ local function render_sbar()
 
   vim.api.nvim_buf_clear_namespace(sbar_buf, bar_ns, 0, -1)
   safe_extmark(sbar_buf, 0, 0, {
-    end_row = 0, end_col = #sep, hl_group = "TurboDebugBarSeparator",
+    end_row = 0,
+    end_col = #sep,
+    hl_group = "TurboDebugBarSeparator",
   })
   -- content row
   safe_extmark(sbar_buf, 1, 0, {
-    end_row = 1, end_col = #brand_text, hl_group = "TurboDebugBarBrand",
+    end_row = 1,
+    end_col = #brand_text,
+    hl_group = "TurboDebugBarBrand",
   })
   if status_dw > 0 then
     local status_byte_start = #brand_text + pad_left
     safe_extmark(sbar_buf, 1, status_byte_start, {
-      end_row = 1, end_col = status_byte_start + #status_msg, hl_group = "TurboDebugBarStatus",
+      end_row = 1,
+      end_col = status_byte_start + #status_msg,
+      hl_group = "TurboDebugBarStatus",
     })
   end
   local chip_byte_start = #content_line - #state_chip
   safe_extmark(sbar_buf, 1, chip_byte_start, {
-    end_row = 1, end_col = #content_line, hl_group = state_hl,
+    end_row = 1,
+    end_col = #content_line,
+    hl_group = state_hl,
   })
 end
 
@@ -504,17 +532,27 @@ local function render_cbar()
   local continue_label = has_session and "continue" or "start"
   local terminate_label = has_session and "terminate" or "quit"
 
+  -- stylua: ignore start
   local controls = {
     { id = "continue",  icon = continue_icon,  default = "c", label = continue_label, italic = nil,    fn = action("continue")  },
     { id = "step_over", icon = ICON.step_over, default = "s", label = "step",          italic = "over", fn = action("step_over") },
     { id = "step_into", icon = ICON.step_into, default = "d", label = "descend",       italic = "into", fn = action("step_into") },
     { id = "step_out",  icon = ICON.step_out,  default = "r", label = "return",        italic = "out",  fn = action("step_out")  },
   }
+  -- stylua: ignore end
   -- (R)estart is only meaningful during an active session
   if has_session then
-    controls[#controls + 1] = { id = "restart", icon = ICON.restart, default = "R", label = "restart", italic = nil, fn = action("restart") }
+    controls[#controls + 1] =
+      { id = "restart", icon = ICON.restart, default = "R", label = "restart", italic = nil, fn = action("restart") }
   end
-  controls[#controls + 1] = { id = "terminate", icon = ICON.stop, default = "q", label = terminate_label, italic = nil, fn = action("terminate") }
+  controls[#controls + 1] = {
+    id = "terminate",
+    icon = ICON.stop,
+    default = "q",
+    label = terminate_label,
+    italic = nil,
+    fn = action("terminate"),
+  }
 
   local gap = "   "
   local function build_controls(include_italic)
@@ -534,9 +572,7 @@ local function render_cbar()
         parts[#parts + 1] = txt
         spans[#spans + 1] = { prefix_len, prefix_len + #txt, "TurboDebugBarCtrl" }
         key_spans[#key_spans + 1] = { prefix_len + kcol, prefix_len + kend }
-        if icol then
-          italic_spans[#italic_spans + 1] = { prefix_len + icol, prefix_len + iend }
-        end
+        if icol then italic_spans[#italic_spans + 1] = { prefix_len + icol, prefix_len + iend } end
         zones[#zones + 1] = { prefix_len, prefix_len + #txt, c.fn }
       end
     end
@@ -546,12 +582,10 @@ local function render_cbar()
   -- Try with italic qualifiers first; fall back to the compact form if
   -- the label row would overflow the available width. Min 1-char padding
   -- on each side of the controls-plus-help block.
-  local controls_text, ctrl_spans, ctrl_key_spans, ctrl_italic_spans, ctrl_zones_bytes =
-    build_controls(true)
+  local controls_text, ctrl_spans, ctrl_key_spans, ctrl_italic_spans, ctrl_zones_bytes = build_controls(true)
   local controls_dw = vim.fn.strdisplaywidth(controls_text)
   if controls_dw + help_dw + 2 > width then
-    controls_text, ctrl_spans, ctrl_key_spans, ctrl_italic_spans, ctrl_zones_bytes =
-      build_controls(false)
+    controls_text, ctrl_spans, ctrl_key_spans, ctrl_italic_spans, ctrl_zones_bytes = build_controls(false)
     controls_dw = vim.fn.strdisplaywidth(controls_text)
   end
 
@@ -570,30 +604,40 @@ local function render_cbar()
 
   vim.api.nvim_buf_clear_namespace(cbar_buf, bar_ns, 0, -1)
   safe_extmark(cbar_buf, 1, 0, {
-    end_row = 1, end_col = #sep, hl_group = "TurboDebugBarSeparator",
+    end_row = 1,
+    end_col = #sep,
+    hl_group = "TurboDebugBarSeparator",
   })
 
   -- control labels on row 0 (content row)
   local ctrl_byte_offset = ctrl_pad_left
   for _, span in ipairs(ctrl_spans) do
     safe_extmark(cbar_buf, 0, ctrl_byte_offset + span[1], {
-      end_row = 0, end_col = ctrl_byte_offset + span[2], hl_group = span[3],
+      end_row = 0,
+      end_col = ctrl_byte_offset + span[2],
+      hl_group = span[3],
     })
   end
   for _, span in ipairs(ctrl_key_spans) do
     safe_extmark(cbar_buf, 0, ctrl_byte_offset + span[1], {
-      end_row = 0, end_col = ctrl_byte_offset + span[2], hl_group = "TurboDebugBarKey",
+      end_row = 0,
+      end_col = ctrl_byte_offset + span[2],
+      hl_group = "TurboDebugBarKey",
     })
   end
   for _, span in ipairs(ctrl_italic_spans) do
     safe_extmark(cbar_buf, 0, ctrl_byte_offset + span[1], {
-      end_row = 0, end_col = ctrl_byte_offset + span[2], hl_group = "TurboDebugBarItalic",
+      end_row = 0,
+      end_col = ctrl_byte_offset + span[2],
+      hl_group = "TurboDebugBarItalic",
     })
   end
 
   local help_byte_start = #content_line - #help_text
   safe_extmark(cbar_buf, 0, help_byte_start, {
-    end_row = 0, end_col = #content_line, hl_group = "TurboDebugBarCtrl",
+    end_row = 0,
+    end_col = #content_line,
+    hl_group = "TurboDebugBarCtrl",
   })
 
   cbar_zones = {}
@@ -601,14 +645,13 @@ local function render_cbar()
     local byte_start = ctrl_byte_offset + z[1]
     local byte_end = ctrl_byte_offset + z[2]
     local dcol_start = vim.fn.strdisplaywidth(content_line:sub(1, byte_start))
-    local dcol_end   = vim.fn.strdisplaywidth(content_line:sub(1, byte_end))
+    local dcol_end = vim.fn.strdisplaywidth(content_line:sub(1, byte_end))
     -- content is on buffer row 0 = window line 1
     cbar_zones[#cbar_zones + 1] = { 1, dcol_start, dcol_end, z[3] }
   end
   local help_dcol_start = vim.fn.strdisplaywidth(content_line:sub(1, help_byte_start))
-  local help_dcol_end   = vim.fn.strdisplaywidth(content_line)
-  cbar_zones[#cbar_zones + 1] = { 1, help_dcol_start, help_dcol_end,
-                                   function() require("turbo-debug.help").open() end }
+  local help_dcol_end = vim.fn.strdisplaywidth(content_line)
+  cbar_zones[#cbar_zones + 1] = { 1, help_dcol_start, help_dcol_end, function() require("turbo-debug.help").open() end }
 end
 
 local function render_bars()
@@ -652,8 +695,9 @@ local function setup_bar_win(win)
   -- might pick up (with laststatus=2 every window gets one) blends
   -- into the bar's Normal bg instead of rendering in the dark default
   -- StatusLine color — which was the "wrong color border below top bar".
-  vim.wo[win].winhighlight = "Normal:TurboDebugBar,EndOfBuffer:TurboDebugBar,StatusLine:TurboDebugBar,StatusLineNC:TurboDebugBar"
-  vim.wo[win].statusline = " "  -- empty content; hl makes it invisible
+  vim.wo[win].winhighlight =
+    "Normal:TurboDebugBar,EndOfBuffer:TurboDebugBar,StatusLine:TurboDebugBar,StatusLineNC:TurboDebugBar"
+  vim.wo[win].statusline = " " -- empty content; hl makes it invisible
   vim.wo[win].winfixheight = true
   vim.wo[win].list = false
   vim.wo[win].cursorline = false
@@ -671,9 +715,7 @@ local function bounce_out(buf)
     buffer = buf,
     callback = function()
       vim.schedule(function()
-        if vim.api.nvim_get_current_buf() == buf then
-          pcall(vim.cmd, "wincmd p")
-        end
+        if vim.api.nvim_get_current_buf() == buf then pcall(vim.cmd, "wincmd p") end
       end)
     end,
   })
@@ -700,9 +742,7 @@ local function open_bars()
     bounce_out(sbar_buf)
   end
 
-  if vim.api.nvim_win_is_valid(caller_win) then
-    pcall(vim.api.nvim_set_current_win, caller_win)
-  end
+  if vim.api.nvim_win_is_valid(caller_win) then pcall(vim.api.nvim_set_current_win, caller_win) end
 
   -- control bar (bottom)
   if not (win_ok(cbar_win)) then
@@ -719,9 +759,7 @@ local function open_bars()
     bounce_out(cbar_buf)
   end
 
-  if vim.api.nvim_win_is_valid(caller_win) then
-    pcall(vim.api.nvim_set_current_win, caller_win)
-  end
+  if vim.api.nvim_win_is_valid(caller_win) then pcall(vim.api.nvim_set_current_win, caller_win) end
 
   render_bars()
 end
@@ -735,15 +773,12 @@ local function pin_dapui_sizes()
   local pane_wins = {}
   for_each_dapui_pane(function(buf, ft)
     local wins = vim.fn.win_findbuf(buf)
-    if wins and win_ok(wins[1]) then
-      pane_wins[ft] = wins[1]
-    end
+    if wins and win_ok(wins[1]) then pane_wins[ft] = wins[1] end
   end)
 
   -- Console to configured height
   if pane_wins.dapui_console then
-    local target = config.opts.console_height
-                   or math.max(8, math.floor(vim.o.lines * 0.2))
+    local target = config.opts.console_height or math.max(8, math.floor(vim.o.lines * 0.2))
     safe_set_height(pane_wins.dapui_console, target)
   end
 
@@ -790,12 +825,8 @@ end
 -- subsequent pin_dapui_sizes() call redistributes it across the dapui
 -- panes according to our initial proportions.
 local function ensure_bar_heights()
-  if win_ok(sbar_win) and vim.api.nvim_win_get_height(sbar_win) ~= 2 then
-    safe_set_height(sbar_win, 2)
-  end
-  if win_ok(cbar_win) and vim.api.nvim_win_get_height(cbar_win) ~= 2 then
-    safe_set_height(cbar_win, 2)
-  end
+  if win_ok(sbar_win) and vim.api.nvim_win_get_height(sbar_win) ~= 2 then safe_set_height(sbar_win, 2) end
+  if win_ok(cbar_win) and vim.api.nvim_win_get_height(cbar_win) ~= 2 then safe_set_height(cbar_win, 2) end
 end
 
 -- Sum the heights of all currently-open dapui pane windows. Used to detect
@@ -828,6 +859,7 @@ local function set_dapui_window_opts(win)
   -- rendered gutter), and the `~` end-of-buffer markers — these are pure
   -- noise in debug-info panes where there's no file to navigate.
   if vim.api.nvim_win_is_valid(win) then
+    -- stylua: ignore start
     vim.wo[win].wrap           = true
     vim.wo[win].breakindent    = true
     vim.wo[win].linebreak      = true
@@ -845,6 +877,7 @@ local function set_dapui_window_opts(win)
     -- first render (not just after the first WinEnter/WinLeave cycle).
     -- setup_active_win_highlights overwrites on focus change.
     vim.wo[win].winhighlight   = DAPUI_WINHL_INACTIVE
+    -- stylua: ignore end
   end
 end
 
@@ -896,19 +929,18 @@ local function ensure_dapui()
   patch_format_value()
 
   local dap = require("dap")
-  dap.listeners.after.event_initialized["turbo-debug"] = function()
-    require("dapui").open()
-  end
+  dap.listeners.after.event_initialized["turbo-debug"] = function() require("dapui").open() end
 
   -- K = hover during a live dap session (global, not per-buffer)
   dap.listeners.after.event_initialized["turbo-debug-hover"] = function()
-    vim.keymap.set("n", "K", function()
-      require("dap.ui.widgets").hover(nil, { border = "rounded" })
-    end, { silent = true, desc = "DAP hover" })
+    vim.keymap.set(
+      "n",
+      "K",
+      function() require("dap.ui.widgets").hover(nil, { border = "rounded" }) end,
+      { silent = true, desc = "DAP hover" }
+    )
   end
-  dap.listeners.after.event_terminated["turbo-debug-hover"] = function()
-    pcall(vim.keymap.del, "n", "K")
-  end
+  dap.listeners.after.event_terminated["turbo-debug-hover"] = function() pcall(vim.keymap.del, "n", "K") end
 
   -- console refresh: trailing-edge throttled so chatty programs don't DOS us
   dap.listeners.after.event_output["turbo-debug-redraw"] = schedule_console_redraw
@@ -927,9 +959,7 @@ local function ensure_dapui()
         local ok, placed = pcall(vim.fn.sign_getplaced, buf, { group = "*" })
         if ok and placed and placed[1] then
           for _, s in ipairs(placed[1].signs or {}) do
-            if s.name == "DapStopped" then
-              pcall(vim.fn.sign_unplace, s.group or "", { buffer = buf, id = s.id })
-            end
+            if s.name == "DapStopped" then pcall(vim.fn.sign_unplace, s.group or "", { buffer = buf, id = s.id }) end
           end
         end
       end
@@ -948,11 +978,11 @@ local function ensure_dapui()
   -- event_stopped/event_continued leaves queued messages behind and
   -- the bar shows stale state until the next render.
   local function refresh_bars() vim.schedule(render_bars) end
-  dap.listeners.after.event_initialized["turbo-debug-bar"]  = refresh_bars
-  dap.listeners.after.event_stopped["turbo-debug-bar"]      = refresh_bars
-  dap.listeners.after.event_continued["turbo-debug-bar"]    = refresh_bars
-  dap.listeners.after.event_terminated["turbo-debug-bar"]   = refresh_bars
-  dap.listeners.after.event_exited["turbo-debug-bar"]       = refresh_bars
+  dap.listeners.after.event_initialized["turbo-debug-bar"] = refresh_bars
+  dap.listeners.after.event_stopped["turbo-debug-bar"] = refresh_bars
+  dap.listeners.after.event_continued["turbo-debug-bar"] = refresh_bars
+  dap.listeners.after.event_terminated["turbo-debug-bar"] = refresh_bars
+  dap.listeners.after.event_exited["turbo-debug-bar"] = refresh_bars
   vim.api.nvim_create_autocmd("User", {
     pattern = "DapProgressUpdate",
     group = vim.api.nvim_create_augroup("TurboDebugDapProgress", { clear = true }),
@@ -985,11 +1015,11 @@ local function ensure_dapui()
       -- Our extmark sign at priority 500 always wins, guaranteeing the
       -- paused line has the finger-pointing icon in the gutter.
       pcall(vim.api.nvim_buf_set_extmark, buf, ip_ns, line, 0, {
-        sign_text     = "\xf0\x9f\x91\x89",  -- 👉 U+1F449
+        sign_text = "\xf0\x9f\x91\x89", -- 👉 U+1F449
         sign_hl_group = "DapStopped",
         virt_text = {
           { "  " .. ICON.ip_left .. "  ", "DapStopped" },
-          { reason,                       "TurboDebugIPReason" },
+          { reason, "TurboDebugIPReason" },
         },
         virt_text_pos = "eol",
         hl_mode = "combine",
@@ -997,9 +1027,9 @@ local function ensure_dapui()
       })
     end, 50)
   end
-  dap.listeners.after.event_continued["turbo-debug-ip"]  = function() clear_ip() end
+  dap.listeners.after.event_continued["turbo-debug-ip"] = function() clear_ip() end
   dap.listeners.before.event_terminated["turbo-debug-ip"] = function() clear_ip() end
-  dap.listeners.before.event_exited["turbo-debug-ip"]     = function() clear_ip() end
+  dap.listeners.before.event_exited["turbo-debug-ip"] = function() clear_ip() end
 
   -- Clear the Console pane on session start/restart.
   --
@@ -1029,8 +1059,8 @@ local function ensure_dapui()
   end
   -- Fire before every session-starting verb so old scrollback is gone
   -- before the new session's output begins.
-  dap.listeners.before.launch["turbo-debug-clear-console"]  = clear_console
-  dap.listeners.before.attach["turbo-debug-clear-console"]  = clear_console
+  dap.listeners.before.launch["turbo-debug-clear-console"] = clear_console
+  dap.listeners.before.attach["turbo-debug-clear-console"] = clear_console
   dap.listeners.before.restart["turbo-debug-clear-console"] = clear_console
 
   -- Default-collapse scopes the user considers noisy (Registers on
@@ -1056,12 +1086,12 @@ local function ensure_dapui()
   -- recognition. REPL is iconless per user preference (its prompt is
   -- already visually distinct enough).
   local titles = {
-    dapui_scopes      = " " .. ICON.scopes      .. "  Scopes",
-    dapui_watches     = " " .. ICON.watches     .. "  Watches",
-    dapui_stacks      = " " .. ICON.stacks      .. "  Call Stack",
+    dapui_scopes = " " .. ICON.scopes .. "  Scopes",
+    dapui_watches = " " .. ICON.watches .. "  Watches",
+    dapui_stacks = " " .. ICON.stacks .. "  Call Stack",
     dapui_breakpoints = " " .. ICON.breakpoints .. "  Breakpoints",
-    dapui_console     = " " .. ICON.terminal    .. "  Console",
-    ["dap-repl"]      = " REPL",
+    dapui_console = " " .. ICON.terminal .. "  Console",
+    ["dap-repl"] = " REPL",
   }
   vim.api.nvim_create_autocmd("FileType", {
     pattern = { "dapui_*", "dap-repl" },
@@ -1118,10 +1148,7 @@ source_window = function()
     if not vim.api.nvim_win_is_valid(w) then return false end
     if vim.api.nvim_win_get_config(w).relative ~= "" then return false end
     local ft = vim.bo[vim.api.nvim_win_get_buf(w)].filetype or ""
-    return ft ~= ""
-      and not ft:match("^dapui_")
-      and ft ~= "dap-repl"
-      and ft ~= "TurboDebugBar"
+    return ft ~= "" and not ft:match("^dapui_") and ft ~= "dap-repl" and ft ~= "TurboDebugBar"
   end
   if is_source(cur) then return cur end
   for _, w in ipairs(vim.api.nvim_list_wins()) do
@@ -1136,9 +1163,7 @@ end
 -- already returned focus — the picker ends up unfocused. Actually shift.
 local function focus_source_win()
   local w = source_window()
-  if w and w ~= vim.api.nvim_get_current_win() then
-    pcall(vim.api.nvim_set_current_win, w)
-  end
+  if w and w ~= vim.api.nvim_get_current_win() then pcall(vim.api.nvim_set_current_win, w) end
 end
 
 local function run_in_source(fn)
@@ -1162,7 +1187,10 @@ end
 
 local function smart_continue()
   local dap = require("dap")
-  if dap.session() then dap.continue(); return end
+  if dap.session() then
+    dap.continue()
+    return
+  end
   run_in_source(function()
     if config.opts.stop_on_entry_when_no_breakpoints ~= false and not has_any_breakpoint() then
       launch_with_stop_on_entry()
@@ -1198,18 +1226,22 @@ local function setup_actions()
   local pb = require("persistent-breakpoints.api")
 
   actions_cache = {
-    continue      = smart_continue,
-    step_over     = function() step_or_launch(dap.step_over) end,
-    step_into     = function() step_or_launch(dap.step_into) end,
-    step_out      = function() step_or_launch(dap.step_out) end,
+    continue = smart_continue,
+    step_over = function() step_or_launch(dap.step_over) end,
+    step_into = function() step_or_launch(dap.step_into) end,
+    step_out = function() step_or_launch(dap.step_out) end,
     run_to_cursor = function() dap.run_to_cursor() end,
-    restart       = function() dap.restart() end,
-    terminate     = smart_terminate,
+    restart = function() dap.restart() end,
+    terminate = smart_terminate,
     help = function()
-      if help.is_open() then help.close() else help.open() end
+      if help.is_open() then
+        help.close()
+      else
+        help.open()
+      end
     end,
-    breakpoint        = function() pb.toggle_breakpoint() end,
-    cond_breakpoint   = function() pb.set_conditional_breakpoint() end,
+    breakpoint = function() pb.toggle_breakpoint() end,
+    cond_breakpoint = function() pb.set_conditional_breakpoint() end,
     clear_breakpoints = function() pb.clear_all_breakpoints() end,
     watch = function()
       local expr
@@ -1219,12 +1251,10 @@ local function setup_actions()
       else
         expr = vim.fn.expand("<cexpr>")
       end
-      if expr and expr ~= "" then
-        require("dapui").elements.watches.add(expr)
-      end
+      if expr and expr ~= "" then require("dapui").elements.watches.add(expr) end
     end,
     hover = function() require("dapui").eval() end,
-    eval  = function() require("dapui").float_element("repl") end,
+    eval = function() require("dapui").float_element("repl") end,
   }
   return actions_cache
 end
@@ -1278,9 +1308,7 @@ function M._install_for_buf(buf)
         end
         local opts = { buffer = buf, silent = true, nowait = true, desc = "turbo-debug: " .. name }
         pcall(vim.keymap.set, "n", key, acts[name], opts)
-        if visual_actions[name] then
-          pcall(vim.keymap.set, "v", key, acts[name], opts)
-        end
+        if visual_actions[name] then pcall(vim.keymap.set, "v", key, acts[name], opts) end
       end
     end
   end
@@ -1291,9 +1319,7 @@ end
 -- clobbered by our subsequent del.
 local function unset_and_restore(buf, name, entry)
   pcall(vim.keymap.del, "n", entry.key, { buffer = buf })
-  if visual_actions[name] then
-    pcall(vim.keymap.del, "v", entry.key, { buffer = buf })
-  end
+  if visual_actions[name] then pcall(vim.keymap.del, "v", entry.key, { buffer = buf }) end
   if entry.prev_n then restore_mapping(buf, "n", entry.prev_n) end
   if entry.prev_v then restore_mapping(buf, "v", entry.prev_v) end
 end
@@ -1321,9 +1347,7 @@ local function set_debug_chrome()
 end
 
 local function clear_debug_chrome()
-  if win_ok(active_win) then
-    vim.wo[active_win].winbar = saved_winbar or ""
-  end
+  if win_ok(active_win) then vim.wo[active_win].winbar = saved_winbar or "" end
   active_win = nil
   saved_winbar = nil
 end
@@ -1335,8 +1359,11 @@ function M.enter()
   active = true
   -- Switch colorscheme BEFORE define_highlights so the TurboDebug*
   -- highlights derive their colors from the debug-mode theme.
-  if type(config.opts.colorscheme) == "string" and config.opts.colorscheme ~= ""
-     and vim.g.colors_name ~= config.opts.colorscheme then
+  if
+    type(config.opts.colorscheme) == "string"
+    and config.opts.colorscheme ~= ""
+    and vim.g.colors_name ~= config.opts.colorscheme
+  then
     saved_colorscheme = vim.g.colors_name
     pcall(vim.cmd.colorscheme, config.opts.colorscheme)
   end
@@ -1384,13 +1411,10 @@ function M.enter()
       if not active then return end
       vim.schedule(function()
         invalidate_dead_bars()
-        if not (sbar_win and cbar_win) then
-          open_bars()
-        end
+        if not (sbar_win and cbar_win) then open_bars() end
         ensure_bar_heights()
         local dapui_total = compute_dapui_total_height()
-        if last_dapui_total_height ~= nil
-           and dapui_total ~= last_dapui_total_height then
+        if last_dapui_total_height ~= nil and dapui_total ~= last_dapui_total_height then
           pin_dapui_sizes()
           dapui_total = compute_dapui_total_height()
         end
@@ -1465,7 +1489,11 @@ function M.exit()
 end
 
 function M.toggle()
-  if active then M.exit() else M.enter() end
+  if active then
+    M.exit()
+  else
+    M.enter()
+  end
 end
 
 function M.is_active() return active end
@@ -1478,7 +1506,9 @@ M._test = {
   build_control_text = build_control_text,
   define_highlights = define_highlights,
   source_window = function() return source_window() end,
-  set_bars = function(sw, sb, cw, cb) sbar_win, sbar_buf, cbar_win, cbar_buf = sw, sb, cw, cb end,
+  set_bars = function(sw, sb, cw, cb)
+    sbar_win, sbar_buf, cbar_win, cbar_buf = sw, sb, cw, cb
+  end,
   get_bars = function() return sbar_win, sbar_buf, cbar_win, cbar_buf end,
   get_sbar_zones = function() return {} end,
   get_cbar_zones = function() return cbar_zones end,

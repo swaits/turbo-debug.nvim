@@ -11,25 +11,25 @@ local buf_id = nil
 -- config.opts.keys[action] lookup. Highlight spans are computed against
 -- the actual key letter in the final line.
 local flow = {
-  { "continue",      "c", "(",                 ")ontinue" },
-  { "step_over",     "s", "(",                 ")tep over" },
-  { "step_into",     "d", "(",                 ")escend into" },
-  { "step_out",      "r", "(",                 ")eturn out" },
-  { "run_to_cursor", "C", "run to (",          ") cursor" },
-  { "restart",       "R", "(",                 ")estart session" },
-  { "terminate",     "q", "(",                 ")uit debugging" },
+  { "continue", "c", "(", ")ontinue" },
+  { "step_over", "s", "(", ")tep over" },
+  { "step_into", "d", "(", ")escend into" },
+  { "step_out", "r", "(", ")eturn out" },
+  { "run_to_cursor", "C", "run to (", ") cursor" },
+  { "restart", "R", "(", ")estart session" },
+  { "terminate", "q", "(", ")uit debugging" },
 }
 
 local breakpoints = {
-  { "breakpoint",        "x", "(", ") toggle breakpoint" },
-  { "cond_breakpoint",   "X", "(", ") conditional breakpoint" },
+  { "breakpoint", "x", "(", ") toggle breakpoint" },
+  { "cond_breakpoint", "X", "(", ") conditional breakpoint" },
   { "clear_breakpoints", "D", "(", ")elete all breakpoints" },
 }
 
 local inspect = {
   { "watch", "W", "(", ")atch expression" },
   { "hover", "K", "(", ") hover / inspect" },
-  { "eval",  "E", "(", ")val in REPL" },
+  { "eval", "E", "(", ")val in REPL" },
 }
 
 local meta = {
@@ -37,27 +37,27 @@ local meta = {
 }
 
 local globals = {
-  { "breakpoint",        "toggle breakpoint" },
-  { "cond_breakpoint",   "conditional breakpoint" },
+  { "breakpoint", "toggle breakpoint" },
+  { "cond_breakpoint", "conditional breakpoint" },
   { "clear_breakpoints", "delete all breakpoints" },
 }
 
 local dapui_panes = {
   { "<CR>", "expand / jump to target" },
-  { "o",    "open target (jump to frame / breakpoint)" },
-  { "e",    "edit (watches)" },
-  { "d",    "remove (watches)" },
-  { "r",    "send to REPL" },
-  { "t",    "toggle subtle frames (call stack)" },
+  { "o", "open target (jump to frame / breakpoint)" },
+  { "e", "edit (watches)" },
+  { "d", "remove (watches)" },
+  { "r", "send to REPL" },
+  { "t", "toggle subtle frames (call stack)" },
 }
 
 -- ▶ U+25B6, ● U+25CF, ◉ U+25C9, ◆ U+25C6, ❯ U+276F, ≡ U+2261
-local ICON_FLOW    = "\xe2\x96\xb6"
-local ICON_BRK     = "\xe2\x97\x8f"
+local ICON_FLOW = "\xe2\x96\xb6"
+local ICON_BRK = "\xe2\x97\x8f"
 local ICON_INSPECT = "\xe2\x97\x89"
-local ICON_META    = "\xe2\x97\x86"
+local ICON_META = "\xe2\x97\x86"
 local ICON_CHEVRON = "\xe2\x9d\xaf"
-local ICON_STACK   = "\xe2\x89\xa1"
+local ICON_STACK = "\xe2\x89\xa1"
 
 -- a brand header and tagline
 local BRAND_TITLE = " " .. ICON_FLOW .. " TURBO DEBUG"
@@ -68,7 +68,7 @@ local function build()
   local hl = {} -- list of { line_idx, col_start, col_end, hl_group }
 
   -- title + tagline highlights
-  hl[#hl + 1] = { 1, 0, #BRAND_TITLE,   "TurboDebugHelpBrand" }
+  hl[#hl + 1] = { 1, 0, #BRAND_TITLE, "TurboDebugHelpBrand" }
   hl[#hl + 1] = { 2, 0, #BRAND_TAGLINE, "TurboDebugHelpTagline" }
 
   local function section(icon, title)
@@ -161,18 +161,16 @@ local function build()
   lines[#lines + 1] = ""
 
   local width = 0
-  for _, l in ipairs(lines) do if vim.fn.strdisplaywidth(l) > width then width = vim.fn.strdisplaywidth(l) end end
+  for _, l in ipairs(lines) do
+    if vim.fn.strdisplaywidth(l) > width then width = vim.fn.strdisplaywidth(l) end
+  end
   return lines, width + 2, hl
 end
 
 function M.close()
-  if win_id and vim.api.nvim_win_is_valid(win_id) then
-    vim.api.nvim_win_close(win_id, true)
-  end
+  if win_id and vim.api.nvim_win_is_valid(win_id) then vim.api.nvim_win_close(win_id, true) end
   win_id = nil
-  if buf_id and vim.api.nvim_buf_is_valid(buf_id) then
-    vim.api.nvim_buf_delete(buf_id, { force = true })
-  end
+  if buf_id and vim.api.nvim_buf_is_valid(buf_id) then vim.api.nvim_buf_delete(buf_id, { force = true }) end
   buf_id = nil
 end
 
@@ -188,7 +186,9 @@ function M.open()
   local ns = vim.api.nvim_create_namespace("turbo-debug.help")
   for _, span in ipairs(hl) do
     pcall(vim.api.nvim_buf_set_extmark, buf_id, ns, span[1], span[2], {
-      end_row = span[1], end_col = span[3], hl_group = span[4],
+      end_row = span[1],
+      end_col = span[3],
+      hl_group = span[4],
     })
   end
 
@@ -216,8 +216,6 @@ function M.open()
   })
 end
 
-function M.is_open()
-  return win_id ~= nil and vim.api.nvim_win_is_valid(win_id)
-end
+function M.is_open() return win_id ~= nil and vim.api.nvim_win_is_valid(win_id) end
 
 return M

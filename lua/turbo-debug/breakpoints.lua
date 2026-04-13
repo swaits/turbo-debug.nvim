@@ -42,6 +42,7 @@ function M.setup()
   --   ⭕ U+2B55  heavy large circle      = rejected breakpoint
   --   👉 U+1F449 backhand pointing right = current execution line (IP)
   --   📝 U+1F4DD memo                    = log point
+  -- stylua: ignore start
   local signs = {
     { "DapBreakpoint",          "\xf0\x9f\x94\xb4" },
     { "DapBreakpointCondition", "\xf0\x9f\x9f\xa1" },
@@ -49,9 +50,14 @@ function M.setup()
     { "DapStopped",             "\xf0\x9f\x91\x89", { linehl = "DapStoppedLine" } },
     { "DapLogPoint",            "\xf0\x9f\x93\x9d" },
   }
+  -- stylua: ignore end
   for _, s in ipairs(signs) do
     local spec = { text = s[2], texthl = s[1], numhl = s[1] }
-    if s[3] then for k, v in pairs(s[3]) do spec[k] = v end end
+    if s[3] then
+      for k, v in pairs(s[3]) do
+        spec[k] = v
+      end
+    end
     vim.fn.sign_define(s[1], spec)
   end
 
@@ -62,6 +68,7 @@ function M.setup()
   vim.api.nvim_set_hl(0, "NvimDapVirtualTextInfo", { default = true, link = "DiagnosticInfo", italic = true })
 
   -- turbo-debug's own UI groups (help float, active-pane borders, winbar badge)
+  -- stylua: ignore start
   vim.api.nvim_set_hl(0, "TurboDebugHelpBrand",       { default = true, link = "Title" })
   vim.api.nvim_set_hl(0, "TurboDebugHelpTagline",     { default = true, link = "Comment", italic = true })
   vim.api.nvim_set_hl(0, "TurboDebugHelpSection",     { default = true, link = "Function" })
@@ -70,6 +77,7 @@ function M.setup()
   vim.api.nvim_set_hl(0, "TurboDebugHelpParen",       { default = true, link = "Comment" })
   vim.api.nvim_set_hl(0, "TurboDebugCtrlButton",      { default = true, link = "Function" })
   vim.api.nvim_set_hl(0, "TurboDebugCtrlMuted",       { default = true, link = "Comment" })
+  -- stylua: ignore end
 
   -- derived highlight: the IP "reason" vtext (STEP / BREAKPOINT / EXCEPTION /
   -- PAUSE / etc.) — bold + reverse + WarningMsg color so it renders as an
@@ -80,7 +88,11 @@ function M.setup()
     local ok, src = pcall(vim.api.nvim_get_hl, 0, { name = "WarningMsg", link = false })
     if not ok or not src or not src.fg then return end
     vim.api.nvim_set_hl(0, "TurboDebugIPReason", {
-      fg = src.fg, bg = src.bg, bold = true, reverse = true, default = true,
+      fg = src.fg,
+      bg = src.bg,
+      bold = true,
+      reverse = true,
+      default = true,
     })
   end
   apply_ip_reason_hl()
@@ -98,9 +110,7 @@ function M.setup()
     { gk.clear_breakpoints, pb.clear_all_breakpoints, "Clear all breakpoints" },
   }
   for _, b in ipairs(bindings) do
-    if b[1] then
-      vim.keymap.set("n", b[1], b[2], { silent = true, desc = b[3] })
-    end
+    if b[1] then vim.keymap.set("n", b[1], b[2], { silent = true, desc = b[3] }) end
   end
 end
 

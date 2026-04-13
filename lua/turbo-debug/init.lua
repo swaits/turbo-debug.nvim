@@ -27,17 +27,14 @@ function M.setup(opts)
   local toggle_key = config.opts.global_keys.toggle
   if toggle_key then
     vim.keymap.set("n", toggle_key, function() mode.toggle() end, {
-      silent = true, desc = "Toggle debug mode",
+      silent = true,
+      desc = "Toggle debug mode",
     })
   end
 end
 
-function M.toggle()
-  mode.toggle()
-end
+function M.toggle() mode.toggle() end
 
-function M.active()
-  return mode.is_active()
-end
+function M.active() return mode.is_active() end
 
 return M

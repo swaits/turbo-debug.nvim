@@ -1,0 +1,17 @@
+# stylua.toml
+# A modern, idiomatic configuration optimized for Neovim/Luau ecosystems.
+
+# General Formatting
+column_width = 120            # Provides enough horizontal space for modern monitors without wrapping too early.
+line_endings = "Unix"         # Enforces LF (\n) line endings to prevent cross-platform Git issues.
+
+# Indentation
+indent_type = "Spaces"        # Spaces are the modern standard over tabs in Lua ecosystems.
+indent_width = 2              # 2 spaces prevent deep nesting (common in Lua tables/callbacks) from drifting too far right.
+
+# Quotes & Strings
+quote_style = "AutoPreferDouble" # Defaults to " but uses ' if it prevents needing escape characters.
+
+# Function Calls & Statements
+call_parentheses = "Always"           # Forces `require("module")` instead of `require "module"` for clarity.
+collapse_simple_statement = "Always"  # Allows simple statements (like `if not x then return end`) to live on one line.

@@ -12,9 +12,7 @@ vim.pack.add({ "theHamsta/nvim-dap-virtual-text" })
 vim.pack.add({ "Weissle/persistent-breakpoints.nvim" })
 
 -- register which-key group if available
-pcall(function()
-  require("which-key").add({ { "<leader>d", group = "debug" } })
-end)
+pcall(function() require("which-key").add({ { "<leader>d", group = "debug" } }) end)
 
 -- Deferred auto-setup. Must be deferred (not called synchronously) because
 -- the vim.pack.add calls above might not have finished registering the

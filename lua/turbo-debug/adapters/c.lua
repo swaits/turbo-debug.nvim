@@ -4,15 +4,11 @@ local M = {}
 
 local function pick_executable(executables)
   local co = coroutine.running()
-  if not co then
-    return executables[1]
-  end
+  if not co then return executables[1] end
   vim.ui.select(executables, {
     prompt = "Select executable",
     format_item = function(path) return vim.fn.fnamemodify(path, ":t") end,
-  }, function(choice)
-    coroutine.resume(co, choice)
-  end)
+  }, function(choice) coroutine.resume(co, choice) end)
   return coroutine.yield()
 end
 
@@ -54,9 +50,7 @@ function M.register(dap)
     },
   }
 
-  if not dap.adapters.codelldb then
-    dap.adapters.codelldb = adapter
-  end
+  if not dap.adapters.codelldb then dap.adapters.codelldb = adapter end
 
   -- C/C++/Swift: pick from compiled executables in cwd
   local prompt_config = {
@@ -64,9 +58,7 @@ function M.register(dap)
       type = "codelldb",
       request = "launch",
       name = "Launch executable",
-      program = function()
-        return vim.fn.input("Path to executable: ", vim.fn.getcwd() .. "/", "file")
-      end,
+      program = function() return vim.fn.input("Path to executable: ", vim.fn.getcwd() .. "/", "file") end,
       cwd = "${workspaceFolder}",
     },
   }
@@ -75,15 +67,16 @@ function M.register(dap)
   end
 
   -- Rust: cargo build + picker
-  dap.configurations.rust = dap.configurations.rust or {
-    {
-      type = "codelldb",
-      request = "launch",
-      name = "Cargo build & launch",
-      program = cargo_build_and_pick,
-      cwd = "${workspaceFolder}",
-    },
-  }
+  dap.configurations.rust = dap.configurations.rust
+    or {
+      {
+        type = "codelldb",
+        request = "launch",
+        name = "Cargo build & launch",
+        program = cargo_build_and_pick,
+        cwd = "${workspaceFolder}",
+      },
+    }
 end
 
 return M

@@ -23,43 +23,102 @@ end
 -- simple executable adapters (inlined — no separate files needed)
 local function register_simple_adapters(dap)
   local simple = {
-    { "netcoredbg", { "netcoredbg" }, {
-      type = "executable", args = { "--interpreter=vscode" },
-    }, { {
-      type = "netcoredbg", request = "launch", name = "Launch .NET",
-      program = function() return vim.fn.input("Path to DLL: ", vim.fn.getcwd() .. "/bin/Debug/", "file") end,
-    } }, { "cs" } },
+    {
+      "netcoredbg",
+      { "netcoredbg" },
+      {
+        type = "executable",
+        args = { "--interpreter=vscode" },
+      },
+      {
+        {
+          type = "netcoredbg",
+          request = "launch",
+          name = "Launch .NET",
+          program = function() return vim.fn.input("Path to DLL: ", vim.fn.getcwd() .. "/bin/Debug/", "file") end,
+        },
+      },
+      { "cs" },
+    },
 
-    { "java", { "java-debug-adapter" }, {
-      type = "executable",
-    }, { {
-      type = "java", request = "launch", name = "Launch class",
-      mainClass = function() return vim.fn.input("Main class: ") end,
-      cwd = "${workspaceFolder}",
-    } }, { "java" } },
+    {
+      "java",
+      { "java-debug-adapter" },
+      {
+        type = "executable",
+      },
+      {
+        {
+          type = "java",
+          request = "launch",
+          name = "Launch class",
+          mainClass = function() return vim.fn.input("Main class: ") end,
+          cwd = "${workspaceFolder}",
+        },
+      },
+      { "java" },
+    },
 
-    { "kotlin", { "kotlin-debug-adapter" }, {
-      type = "executable",
-    }, { {
-      type = "kotlin", request = "launch", name = "Launch main",
-      mainClass = function() return vim.fn.input("Main class: ") end,
-      projectRoot = "${workspaceFolder}",
-    } }, { "kotlin" } },
+    {
+      "kotlin",
+      { "kotlin-debug-adapter" },
+      {
+        type = "executable",
+      },
+      {
+        {
+          type = "kotlin",
+          request = "launch",
+          name = "Launch main",
+          mainClass = function() return vim.fn.input("Main class: ") end,
+          projectRoot = "${workspaceFolder}",
+        },
+      },
+      { "kotlin" },
+    },
 
-    { "php", { "php-debug-adapter" }, {
-      type = "executable",
-    }, { {
-      type = "php", request = "launch", name = "Listen for Xdebug", port = 9003,
-    } }, { "php" } },
+    {
+      "php",
+      { "php-debug-adapter" },
+      {
+        type = "executable",
+      },
+      {
+        {
+          type = "php",
+          request = "launch",
+          name = "Listen for Xdebug",
+          port = 9003,
+        },
+      },
+      { "php" },
+    },
 
-    { "rdbg", { "rdbg" }, {
-      type = "server", port = "${port}",
-      executable = { command = nil, args = { "-n", "--open", "--port", "${port}", "-c", "--", "ruby", "${file}" } },
-    }, { {
-      type = "rdbg", request = "launch", name = "Launch file", command = "ruby", script = "${file}",
-    }, {
-      type = "rdbg", request = "attach", name = "Attach", localfsMap = "${workspaceFolder}",
-    } }, { "ruby" } },
+    {
+      "rdbg",
+      { "rdbg" },
+      {
+        type = "server",
+        port = "${port}",
+        executable = { command = nil, args = { "-n", "--open", "--port", "${port}", "-c", "--", "ruby", "${file}" } },
+      },
+      {
+        {
+          type = "rdbg",
+          request = "launch",
+          name = "Launch file",
+          command = "ruby",
+          script = "${file}",
+        },
+        {
+          type = "rdbg",
+          request = "attach",
+          name = "Attach",
+          localfsMap = "${workspaceFolder}",
+        },
+      },
+      { "ruby" },
+    },
   }
 
   for _, s in ipairs(simple) do
@@ -77,10 +136,13 @@ local function register_simple_adapters(dap)
   local ok, osv = pcall(require, "osv")
   if ok then
     M.register(dap, "nlua", {
-      type = "server", host = "127.0.0.1",
+      type = "server",
+      host = "127.0.0.1",
       port = function() return osv.launch({ port = 0 }) end,
     }, { {
-      type = "nlua", request = "attach", name = "Attach to running Neovim",
+      type = "nlua",
+      request = "attach",
+      name = "Attach to running Neovim",
     } }, { "lua" })
   end
 end
@@ -93,9 +155,7 @@ function M.setup()
   -- load adapters with non-trivial logic from separate files
   for _, name in ipairs({ "python", "go", "c", "javascript" }) do
     local ok, adapter_mod = pcall(require, "turbo-debug.adapters." .. name)
-    if ok and adapter_mod.register then
-      adapter_mod.register(dap)
-    end
+    if ok and adapter_mod.register then adapter_mod.register(dap) end
   end
 
   -- register simple adapters inlined above

@@ -9,28 +9,31 @@ CONTENTS                                            *turbo-debug-contents*
   4. Debug Mode ............................ |turbo-debug-debug-mode|
   5. Keybindings ........................... |turbo-debug.keys|
   6. Breakpoints ........................... |turbo-debug-breakpoints|
-  7. UI Layout ............................. |turbo-debug-layout|
-  8. Adapters .............................. |turbo-debug.adapters|
-  9. API ................................... |turbo-debug-api|
- 10. Troubleshooting ....................... |turbo-debug-troubleshooting|
+  7. Chrome Bars ........................... |turbo-debug-chrome|
+  8. UI Layout ............................. |turbo-debug-layout|
+  9. Adapters .............................. |turbo-debug.adapters|
+ 10. API ................................... |turbo-debug-api|
+ 11. Troubleshooting ....................... |turbo-debug-troubleshooting|
 
 ==============================================================================
 1. Introduction                                 *turbo-debug-introduction*
 
-turbo-debug.nvim gives you a fully-featured, beautiful debugging experience
-out of one line of config. Under the hood it wires together nvim-dap,
-nvim-dap-ui, nvim-dap-virtual-text, and persistent-breakpoints into a single
-cohesive experience with modal keybindings.
+turbo-debug.nvim gives you a fully-featured debugging experience out of one
+line of config. Under the hood it wires together nvim-dap, nvim-dap-ui,
+nvim-dap-virtual-text, and persistent-breakpoints into a single cohesive
+modal experience.
 
 Features:
+- Modal keybindings active only during debug sessions — single-key controls
+  that shadow editing keys, cleanly restored on exit
 - Inline virtual text showing variable values in source code
-- Hover inspection with `K`
-- Persistent breakpoints that survive restarts
-- Watch expressions from the code window with `W`
-- Scopes, stacks, REPL, and console panels
-- Modal keybindings active only during debug sessions
-- Help box showing all keybindings
-- Zero-config adapters for 10+ languages
+- Persistent breakpoints that survive Neovim restarts
+- Hover inspection (|K|) and watch expressions (|W|) from the code window
+- Floating REPL eval (|E|)
+- Floating status bar + control bar chrome (independent of any statusline
+  plugin)
+- Zero-config adapters for 12 languages
+- Theme-agnostic colors (every highlight links to a standard group)
 
 ==============================================================================
 2. Installation                                 *turbo-debug-installation*
@@ -47,26 +50,125 @@ Requires Neovim >= 0.12.
 
 Setup is optional. The plugin works with no configuration. To customize: >lua
   require("turbo-debug").setup({
-    help_on_enter = true,       -- show help splash on debug mode entry
-    quit_exits_mode = true,     -- q terminates AND exits debug mode
-    builtin_adapters = true,    -- register built-in language adapters
-    keys = { ... },             -- override modal keybindings
-    global_keys = { ... },      -- override always-available keybindings
-    adapters = { ... },         -- override or add language adapters
-    dapui = { ... },            -- override nvim-dap-ui layout/settings
-    virtual_text = { ... },     -- override nvim-dap-virtual-text settings
+    help_on_enter                     = false,
+    builtin_adapters                  = true,
+    stop_on_entry_when_no_breakpoints = true,
+    max_value_width                   = 2000,
+    console_refresh_ms                = 50,
+    collapsed_scopes                  = { "Registers" },
+    clear_console_on_start            = true,
+    sidebar                           = "left",
+    colorscheme                       = nil,
+    active_window_highlight           = true,
+    keys                              = { ... },
+    global_keys                       = { ... },
+    adapters                          = { ... },
+    dapui                             = { ... },
+    virtual_text                      = { ... },
   })
 <
                                            *turbo-debug.setup.help_on_enter*
 help_on_enter ~
-  Type: boolean, Default: `true`
-  Show the help box automatically when entering debug mode.
+  Type: boolean, Default: `false`
+  Show the help popup automatically when entering debug mode. The control
+  bar always shows `(?) help`, so most users don't need the splash.
 
                                         *turbo-debug.setup.builtin_adapters*
 builtin_adapters ~
   Type: boolean, Default: `true`
-  Register built-in adapters for supported languages. Set to `false` to
-  disable all built-in adapter registration.
+  Register the built-in language adapters. Set to `false` to opt out of
+  all built-in adapter registration and manage adapters yourself.
+
+                       *turbo-debug.setup.stop_on_entry_when_no_breakpoints*
+stop_on_entry_when_no_breakpoints ~
+  Type: boolean, Default: `true`
+  When `c` is pressed with no breakpoints set, launch the first adapter
+  configuration for the filetype with `stopOnEntry = true` so the debugger
+  pauses at the program's entry point. Matches the Turbo Pascal "press
+  key to start debugging" model. Set `false` to always run until a
+  breakpoint.
+
+                                        *turbo-debug.setup.max_value_width*
+max_value_width ~
+  Type: integer, Default: `2000`
+  Per-line character cap for variable values rendered in Scopes/Watches.
+  Values exceeding this are truncated with `…`. Default 2000 only catches
+  pathological multi-KB dumps; normal values pass through. Set to `0` to
+  disable truncation entirely.
+
+                                     *turbo-debug.setup.console_refresh_ms*
+console_refresh_ms ~
+  Type: integer, Default: `50`
+  Trailing-edge throttle (ms) for Console pane repaints when the debugged
+  program outputs. Max `1000/console_refresh_ms` redraws per second.
+  Prevents editor lag under high-throughput output.
+
+                                       *turbo-debug.setup.collapsed_scopes*
+collapsed_scopes ~
+  Type: string[], Default: `{ "Registers" }`
+  Scope names (as reported by the DAP adapter) to default-collapse. Some
+  adapters (codelldb for Rust/C++, for example) don't mark Registers as
+  "expensive" even though it's a huge dump. Any scope name in this list
+  is treated as expensive — dapui auto-collapses expensive scopes.
+
+                                  *turbo-debug.setup.clear_console_on_start*
+clear_console_on_start ~
+  Type: boolean, Default: `true`
+  Clear the Console pane on session start/restart. The terminal channel
+  is preserved — only the displayed scrollback is wiped.
+
+                                                *turbo-debug.setup.sidebar*
+sidebar ~
+  Type: string, Default: `"left"`
+  Sidebar position: `"left"` or `"right"`. Controls which side of the
+  editor the Stacks/Scopes/Watches/Breakpoints column appears on.
+
+                                            *turbo-debug.setup.colorscheme*
+colorscheme ~
+  Type: string|nil, Default: `nil`
+  Optional colorscheme to switch to while debug mode is active. `nil`
+  keeps the user's current colorscheme. Any other string value is passed
+  to `:colorscheme`. The previous colorscheme is restored on exit.
+
+                                *turbo-debug.setup.active_window_highlight*
+active_window_highlight ~
+  Type: boolean, Default: `true`
+  Dim inactive dapui panes' borders so the focused pane is visually
+  obvious.
+
+                                                   *turbo-debug.setup.keys*
+keys ~
+  Type: table, Default: see |turbo-debug.keys|
+  Override modal keybindings (active only during debug mode). Set any
+  entry to `false` to disable that action entirely.
+
+                                            *turbo-debug.setup.global_keys*
+global_keys ~
+  Type: table, Default: see |turbo-debug.keys|
+  Override always-available keybindings. Set any entry to `false` to
+  disable.
+
+                                               *turbo-debug.setup.adapters*
+adapters ~
+  Type: table, Default: `{}`
+  Override or add language adapters. Keyed by adapter name; each value
+  is a table with `adapter` (passed to |dap.adapters|) and/or
+  `configurations` (passed to |dap.configurations|) fields. User
+  overrides are applied after the built-ins, so existing adapter entries
+  are replaced.
+
+                                                  *turbo-debug.setup.dapui*
+dapui ~
+  Type: table
+  Pass-through configuration for nvim-dap-ui's |dapui.setup()|. Override
+  icons, controls, floating window style, render options, etc.
+
+                                           *turbo-debug.setup.virtual_text*
+virtual_text ~
+  Type: table
+  Pass-through configuration for nvim-dap-virtual-text. Set
+  `virtual_text = { enabled = false }` to disable inline variable
+  values entirely.
 
 ==============================================================================
 4. Debug Mode                                    *turbo-debug-debug-mode*
@@ -74,17 +176,28 @@ builtin_adapters ~
 Press `<leader>dd` to toggle debug mode.
 
 Entering debug mode:
-1. Opens nvim-dap-ui with the configured layout
-2. Enables inline virtual text for variable values
-3. Activates modal keybindings (buffer-local)
-4. Shows winbar indicator and help splash (3s)
+1. Switches colorscheme (if |turbo-debug.setup.colorscheme| is set)
+2. Applies turbo-debug highlight groups
+3. Opens nvim-dap-ui (sidebar + Console pane)
+4. Creates the floating status bar (top) and control bar (bottom)
+5. Installs modal keybindings on every buffer
+6. Enables nvim-dap-virtual-text
+7. Optionally shows the help popup (|turbo-debug.setup.help_on_enter|)
 
 Exiting debug mode (any of):
 - `<leader>dd` again (manual toggle)
-- `q` (terminate session — exits debug mode if `quit_exits_mode`)
-- DAP session ends naturally
+- `q` when no DAP session is running
+- Context-aware `q`: if a session IS running, `q` terminates the session
+  but leaves debug mode active so you can inspect the Console / watch
+  post-mortem state. Press `q` again to exit debug mode.
 
-On exit, everything is restored: keymaps, UI, virtual text, cursor.
+On exit, everything is restored:
+- Modal keymaps removed, any prior user mappings re-installed
+- Source window's original `winbar` restored
+- `WinSeparator` highlight restored byte-for-byte
+- Original colorscheme restored (if one was swapped in)
+- dapui panes closed, control bars removed
+- Virtual text disabled
 
 ==============================================================================
 5. Keybindings                                         *turbo-debug.keys*
@@ -95,7 +208,7 @@ keys you don't need while debugging, but preserve all navigation keys.
 Default keymap:
 
   Key   Action                    Mnemonic ~
-  `c`     Continue                  Universal across debuggers
+  `c`     Continue / start          Universal across debuggers
   `s`     Step over                 Step
   `d`     Step into                 Descend into the function
   `r`     Step out                  Return from the function
@@ -105,8 +218,8 @@ Default keymap:
   `D`     Clear all breakpoints     Delete all
   `W`     Watch expr under cursor   Watch
   `K`     Hover / inspect           Matches LSP hover convention
-  `E`     Eval in REPL              Evaluate
-  `q`     Terminate session         Quit debugging
+  `E`     Eval in REPL              Evaluate (floating REPL)
+  `q`     Smart quit                Context-aware terminate / exit
   `R`     Restart session           Rerun
   `?`     Help popup                Show keybindings
 
@@ -117,29 +230,30 @@ Always available (under `<leader>d` prefix, with which-key support):
   `<leader>dX`  Conditional breakpoint    Shift variant
   `<leader>dD`  Clear all breakpoints     Delete all
 
+`W` and `K` also work in visual mode — they operate on the visual
+selection.
+
 Override any key: >lua
   require("turbo-debug").setup({
-    keys = {                          -- modal keys (debug mode only)
-      continue = "g",
-      step_over = false,              -- set to false to disable
+    keys = {
+      continue  = "g",         -- remap a modal key
+      step_over = false,       -- disable a modal key
     },
-    global_keys = {                   -- always-available keys
+    global_keys = {
       toggle = "<leader>DD",
       breakpoint = "<leader>db",
     },
   })
 <
-Preserved keys (not shadowed):
-- Navigation: `h j k l w b e f F t T / n N 0 ^ $ G g { } % [ ]`
-- Insert: `i a o O` (needed for REPL/terminal)
-- Visual/yank: `v V y p u`
-- All Ctrl/leader combos
+Inside dapui panes (Watches / Scopes / Stacks / Breakpoints / REPL), the
+native dapui mappings `<CR>` / `e` / `o` / `d` / `r` / `t` still work —
+our modal `d` (step-into) and `r` (step-out) yield inside those buffers.
 
-                                       *turbo-debug.setup.quit_exits_mode*
-quit_exits_mode ~
-  Type: boolean, Default: `true`
-  Whether `q` (terminate) also exits debug mode. Set to `false` if you
-  want `q` to terminate the process but keep the debug UI open.
+Preserved keys (never shadowed in source buffers):
+- Navigation: `h j k l w b e f F t T / n N 0 ^ $ G g { } % [ ]`
+- Insert:     `i a o O`
+- Visual/yank/edit: `v V y p u`
+- All Ctrl/Alt/leader combos
 
 ==============================================================================
 6. Breakpoints                                  *turbo-debug-breakpoints*
@@ -147,23 +261,57 @@ quit_exits_mode ~
 Breakpoints are managed by persistent-breakpoints.nvim. They persist across
 Neovim restarts and are visible in the sign column at all times.
 
-`<leader>dx` toggles a breakpoint (always available).
-`<leader>dX` sets a conditional breakpoint (always available).
-`x`, `X`, `D` also work as shortcuts during debug mode.
+Global shortcuts (always available):
+  `<leader>dx`  Toggle breakpoint
+  `<leader>dX`  Conditional breakpoint (prompts for condition)
+  `<leader>dD`  Clear all breakpoints
+
+Modal shortcuts (debug mode only): `x` `X` `D` do the same.
+
+Gutter signs (colorful emoji in modern terminals):
+  🔴  breakpoint
+  🟡  conditional breakpoint
+  ⭕  rejected breakpoint (DAP server couldn't set it)
+  👉  current execution line (paired with `👈 REASON` virtual text)
+  📝  logpoint
 
 ==============================================================================
-7. UI Layout                                       *turbo-debug-layout*
+7. Chrome Bars                                     *turbo-debug-chrome*
+
+Debug mode opens two floating bars, independent of any statusline plugin:
+
+Status bar (top, 2 rows) shows:
+- `turbo-debug` brand
+- `dap.status()` progress text (right of brand)
+- State chip: ` DEBUG · READY ` / ` · RUNNING ` / ` · PAUSED `
+
+Control bar (bottom, 2 rows, above your statusline) shows:
+- Clickable buttons for `(c)ontinue`, `(s)tep` over, `(d)escend` into,
+  `(r)eturn` out, `(R)estart` (during session), `(q)uit`
+- Italic qualifiers (`over`, `into`, `out`) shown inline when width allows
+- `(?) help` anchored on the right
+- Click any button to fire its action
+
+Both bars update live on DAP state transitions (|User DapProgressUpdate|)
+and on editor resize. They survive tabline toggles (bufferline appear/
+disappear) — killed bars are recreated automatically.
+
+==============================================================================
+8. UI Layout                                       *turbo-debug-layout*
 
 Default layout:
 
-  Left sidebar (40 columns):
-  - Scopes (50%) — local/global variables in current frame
-  - Watches (25%) — user-added watch expressions
-  - Stacks (25%) — call stack navigation
+  Sidebar (|turbo-debug.setup.sidebar|, left or right, 25-40 cols):
+  - Call Stack   (25%) — current frames, navigate with `<CR>`
+  - Scopes       (25%) — local/global variables in current frame
+  - Watches      (25%) — user-added watch expressions (|W|)
+  - Breakpoints  (25%) — all persistent breakpoints, jump with `<CR>`
 
-  Bottom tray (12 lines):
-  - REPL (50%) — evaluate expressions
-  - Console (50%) — program stdout/stderr
+  Bottom pane (20% of editor lines, min 8 rows):
+  - Console — program stdout/stderr + adapter output
+
+REPL is NOT in the default layout. Press `E` during debug mode to open it
+as a floating window on demand.
 
 Override the layout: >lua
   require("turbo-debug").setup({
@@ -173,7 +321,7 @@ Override the layout: >lua
   })
 <
 ==============================================================================
-8. Adapters                                        *turbo-debug.adapters*
+9. Adapters                                        *turbo-debug.adapters*
 
 Built-in adapter support (adapter binary must be installed):
 
@@ -192,25 +340,39 @@ Built-in adapter support (adapter binary must be installed):
   Lua (Neovim)     osv              one-small-step-for-vimkind
 
 Path resolution order:
-1. User override via `opts.adapters`
+1. User override via |turbo-debug.setup.adapters|
 2. Binary on `$PATH`
 3. Standard mason install path (~/.local/share/nvim/mason/bin/)
 
-Adapter binaries are the user's responsibility to install.
+Rust gets special treatment: pressing `c` runs `cargo build` automatically
+and picks the binary via `vim.ui.select` if multiple artifacts exist.
+
+Python auto-detects virtualenvs: `VIRTUAL_ENV`, `CONDA_PREFIX`, then the
+common directories `.venv`, `venv`, `env`, `.env` relative to `cwd`.
+
+Adapter binaries are the user's responsibility to install (mason.nvim is
+the easiest route).
 
 Override or add adapters: >lua
   require("turbo-debug").setup({
     adapters = {
-      python = { ... },    -- override built-in
-      zig = { ... },        -- add new language
+      python = { adapter = { ... }, configurations = { ... } },
+      zig    = { adapter = { ... }, configurations = { ... } },
     },
     builtin_adapters = false,  -- disable all built-ins
   })
 <
-Existing user nvim-dap configurations are never overridden.
+Existing user nvim-dap configurations are never overridden — if a user
+has already set `dap.adapters[name]` before `turbo-debug.setup()` runs,
+we skip it.
 
 ==============================================================================
-9. API                                              *turbo-debug-api*
+10. API                                              *turbo-debug-api*
+
+                                                    *turbo-debug.setup()*
+require("turbo-debug").setup({opts})
+  Initialize the plugin with optional configuration. Idempotent — safe
+  to call multiple times; the last call's opts win.
 
                                                     *turbo-debug.toggle()*
 require("turbo-debug").toggle()
@@ -222,24 +384,29 @@ require("turbo-debug").active()
   Useful for statusline integration.
 
 ==============================================================================
-10. Troubleshooting                          *turbo-debug-troubleshooting*
+11. Troubleshooting                          *turbo-debug-troubleshooting*
 
 No adapter found ~
   Ensure the adapter binary is installed and on your PATH, or installed
-  via mason.nvim. turbo-debug configures adapters, it does not install
+  via mason.nvim. turbo-debug configures adapters; it does not install
   them.
 
 Breakpoints not persisting ~
-  Check that persistent-breakpoints.nvim is loaded. Run:
-  `:lua print(require("persistent-breakpoints") and "ok")`
-
+  Check that persistent-breakpoints.nvim is loaded: >vim
+    :lua print(require("persistent-breakpoints") and "ok")
+<
 Virtual text not appearing ~
   Virtual text only appears during an active DAP session in debug mode.
-  Ensure nvim-dap-virtual-text is loaded:
-  `:lua print(require("nvim-dap-virtual-text") and "ok")`
+  Ensure nvim-dap-virtual-text is loaded: >vim
+    :lua print(require("nvim-dap-virtual-text") and "ok")
+<
+Bars look squished / have stray `~` markers ~
+  The bars auto-clamp to 2 rows on every resize event. If you see this
+  persistently, please open an issue with your terminal and
+  `:set lines? columns?` output.
 
 Version error ~
-  turbo-debug.nvim requires Neovim >= 0.12 for vim.pack support.
+  turbo-debug.nvim requires Neovim >= 0.12 for `vim.pack` support.
 
 ==============================================================================
 vim:tw=78:ts=8:ft=help:norl:

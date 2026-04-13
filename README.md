@@ -97,7 +97,12 @@ require("turbo-debug").setup({
     toggle = "<leader>D",  -- change the toggle chord
   },
   sidebar = "right",       -- "left" (default) or "right"
-  help_on_enter = false,   -- disable the help splash
+  help_on_enter = true,    -- show help popup on debug mode entry (default false)
+
+  -- Optional theme swap for debug sessions. `nil` (default) keeps the
+  -- current colorscheme; any string is passed to `:colorscheme` on enter
+  -- and the original is restored on exit.
+  colorscheme = nil,
 
   -- Auto stop-on-entry when no breakpoints are set (Turbo Pascal model):
   -- press `c` on an empty-BP project and the debugger pauses at main().
@@ -112,23 +117,44 @@ require("turbo-debug").setup({
   -- Console repaint throttle (ms). Max 1000/console_refresh_ms redraws per
   -- second when the debugged program spams stdout. Prevents editor DOS.
   console_refresh_ms = 50,
+
+  -- Clear the Console pane on session start/restart (preserves the
+  -- terminal channel — only wipes scrollback).
+  clear_console_on_start = true,
+
+  -- Scope names to default-collapse in Scopes. dapui auto-collapses any
+  -- scope the adapter marks `expensive`, but codelldb doesn't flag
+  -- Registers as expensive even though it's a huge dump.
+  collapsed_scopes = { "Registers" },
+
+  -- Dim inactive dapui pane borders so the focused pane is obvious.
+  active_window_highlight = true,
 })
 ```
 
-### Control bar
+### Chrome bars
 
-When debug mode is active a 1-row floating bar appears directly above your
-statusline, showing:
+When debug mode is active, two 2-row floating bars appear, completely
+independent of lualine, heirline, or any other statusline plugin:
 
-- `● READY` / `● RUNNING` / `● PAUSED` session state chip (color-coded)
-- Clickable controls:  continue `▶`,  step over,  step into,  step out,
-  restart,  terminate,  exit debug mode
-- `dap.status()` progress text (right-aligned)
-- Cursor position
+**Status bar (top)** shows:
+- The `turbo-debug` brand
+- Live `dap.status()` progress text
+- Session state chip: ` DEBUG · READY ` / ` · RUNNING ` / ` · PAUSED `
+  (color-coded via `DiagnosticHint` / `DiagnosticInfo` / `DiagnosticError`)
 
-The bar is completely independent of lualine, heirline, or any other
-statusline plugin — it opens in its own floating window and closes cleanly
-when debug mode exits.
+**Control bar (bottom, above your statusline)** shows:
+- Clickable buttons: `(c)ontinue` / `(s)tep` *over* / `(d)escend` *into* /
+  `(r)eturn` *out* / `(R)estart` (during session) / `(q) terminate`
+- `(?) help` right-anchored
+- Italic qualifiers (`over`, `into`, `out`) are inline when width allows;
+  auto-dropped on narrow terminals
+
+Both bars:
+- Recreate themselves if killed by layout changes (bufferline tabline
+  toggles, `wincmd =`, etc.)
+- Re-render on every DAP state change (|User DapProgressUpdate|)
+- Close cleanly on exit
 
 ### Design notes
 
@@ -136,18 +162,21 @@ when debug mode exits.
   the help popup (`?`), the hover popup (`K`), and the debug-eval popup
   (`E`). Floating windows are the only windows Neovim draws borders around
   in the terminal grid. Splits (the Scopes/Watches/Stacks/Breakpoints/
-  REPL/Console panes) use the user's `WinSeparator` character — that's a
+  Console panes) use the user's `WinSeparator` character — that's a
   terminal-rendering limit, not a plugin choice.
 
 - **No hardcoded colors.** Every highlight links to a standard group
   (`DiagnosticError`, `Function`, `Comment`, `CursorLine`, `Visual`,
-  `Search`, `Title`, `Special`, etc.) so the plugin automatically inherits
-  your colorscheme on the fly. Switch themes mid-session and everything
-  re-paints.
+  `Search`, `Title`, `Special`, `WinBar`, etc.) so the plugin
+  automatically inherits your colorscheme on the fly. Switch themes
+  mid-session (or set `colorscheme = "high-contrast"` in `setup()` for
+  a dedicated debug theme) and everything re-paints.
 
-- **Nerd Font Codicons** for all functional iconography (gutter signs,
-  control buttons, pane titles). Emoji (`👈` / `👉`) for the paused-line
-  arrows, because fingers-pointing-at-the-line is unmissable.
+- **Emoji** (supplementary-plane, not VS16-dependent) for iconography:
+  🔴 🟡 ⭕ 👉 📝 for gutter signs; 🟢 🚀 👣 🔽 🔼 🔄 🛑 for control
+  buttons; 🔎 👀 📚 🔴 💻 for pane titles. Colored emoji render
+  consistently in modern terminals (Ghostty, Kitty, WezTerm, iTerm)
+  without font-dependent rendering quirks.
 
 ## Supported Languages
 

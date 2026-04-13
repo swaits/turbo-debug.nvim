@@ -27,15 +27,16 @@ function M.register(dap)
       type = "pwa-node",
       request = "attach",
       name = "Attach",
-      processId = function()
-        return require("dap.utils").pick_process()
-      end,
+      processId = function() return require("dap.utils").pick_process() end,
       cwd = "${workspaceFolder}",
     },
   }
 
   loader.register(dap, "pwa-node", adapter, configurations, {
-    "javascript", "typescript", "javascriptreact", "typescriptreact",
+    "javascript",
+    "typescript",
+    "javascriptreact",
+    "typescriptreact",
   })
 end
 
