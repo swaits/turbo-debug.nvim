@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.2.1 — 2026-04-12
+
+Language coverage release. 10 new DAP adapters bring built-in support from
+12 to 22 languages, prioritized by language popularity and DAP adapter
+maturity.
+
+### Added
+
+- **Dart** (with optional **Flutter**) — auto-detects `flutter` on PATH and
+  adds a "Launch Flutter app" configuration alongside the plain Dart file
+  launch. Uses `dart debug_adapter` / `flutter debug_adapter`.
+- **Bash / Sh** — `bash-debug-adapter` with automatic `bashdb_dir` probing
+  from the mason package path.
+- **R** — `vscDebugger` R-package integration. Preflights the package via
+  `Rscript` and silently skips registration if it's missing.
+- **Elixir** — `elixir-ls-debugger` with `mix_task` launch (default task
+  `test`). Falls back to the mason package `debugger.sh` if the wrapper
+  binary isn't on PATH.
+- **Haskell** — `haskell-debug-adapter`.
+- **OCaml** — `ocamlearlybird`.
+- **Zig / Nim / Crystal** — routed through the existing `codelldb` adapter
+  via filetype extension (no new adapter; just added filetypes to the
+  existing codelldb configuration).
+- **F#** — routed through the existing `netcoredbg` adapter (same
+  `.dll`-launch flow as C#).
+
+### Internal
+
+- Extended `tests/test_adapters.lua` to cover the three new modular adapter
+  modules (`dart`, `bash`, `r`).
+- All new registrations follow the existing `find_executable` +
+  `loader.register` pattern and silently skip when the required binary
+  isn't found — matches the "no noise when prereqs missing" invariant of
+  the previously-shipped adapters.
+
 ## 0.2.0 — 2026-04-12
 
 Major UI rework and stability release. Two floating chrome bars replace the
